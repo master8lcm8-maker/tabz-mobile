@@ -1,45 +1,26 @@
-// ======================================================
 // components/CashoutsScreen.tsx
-// Unified (NO query params; uses x-user-id header ONLY)
-// ======================================================
-
 import React, { useEffect, useMemo, useState } from "react";
 import {
-  View,
-  Text,
-  ScrollView,
-  TouchableOpacity,
   ActivityIndicator,
-  TextInput,
   Alert,
+  FlatList,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from "react-native";
-import axios from "axios";
 
-import { BASE_URL } from "../lib/api";
+import { BASE_URL } from "./lib/api";
 import { OWNER_TOKEN } from "../lib/ownerToken";
 
-type WalletSummary = {
-  balanceCents: number;
-  cashoutAvailableCents: number;
-};
-
-type WalletMetrics = {
-  totalCashouts: number;
-  totalPending: number;
-  totalCompleted: number;
-  totalFailed: number;
-  totalAmountPaidOut: number;
-  totalAmountPending: number;
-  totalAmountFailedReturned: number;
-};
-
-type CashoutRecord = {
+type Cashout = {
   id: number;
-  walletId: number;
+  walletId?: number;
   amountCents: number;
   status: string;
-  failureReason?: string;
-  destinationLast4?: string;
+  failureReason?: string | null;
+  destinationLast4?: string | null;
   createdAt: string;
 };
 
@@ -49,290 +30,186 @@ function dollarsFromCents(cents?: number) {
 }
 
 export default function CashoutsScreen() {
-  const token = OWNER_TOKEN;
-
-  const headers = useMemo(() => {
-    return {
-      Authorization: `Bearer ${token}`,
-      "x-user-id": "3",
-    };
-  }, [token]);
-
   const [loading, setLoading] = useState(true);
-  const [summary, setSummary] = useState<WalletSummary | null>(null);
-  const [metrics, setMetrics] = useState<WalletMetrics | null>(null);
-  const [history, setHistory] = useState<CashoutRecord[]>([]);
-  const [error, setError] = useState<string | null>(null);
-
+  const [posting, setPosting] = useState(false);
+  const [cashouts, setCashouts] = useState<Cashout[]>([]);
   const [amountUsd, setAmountUsd] = useState("5");
 
-  function describeAxiosError(err: any): string {
+  // Keep existing behavior: web-safe query param
+  const USER_ID = "3";
+  const QS = useMemo(() => `?userId=${encodeURIComponent(USER_ID)}`, []);
+
+  async function api(path: string, init?: RequestInit) {
+    const url = `${BASE_URL}${path}`;
+    const res = await fetch(url, {
+      ...(init || {}),
+      headers: {
+        Authorization: `Bearer ${OWNER_TOKEN}`,
+        "Content-Type": "application/json",
+        ...(init?.headers || {}),
+      } as any,
+    });
+
+    const text = await res.text();
+    let data: any = null;
     try {
-      if (err.response) {
-        const status = err.response.status;
-        const data = err.response.data;
-        const msg =
-          typeof data === "string"
-            ? data
-            : data?.message || JSON.stringify(data);
-        return `HTTP ${status} – ${msg}`;
-      }
-      if (err.request) return "No response from server.";
-      return err.message || "Unknown error";
+      data = text ? JSON.parse(text) : null;
     } catch {
-      return "Error parsing error";
+      data = text;
     }
+
+    if (!res.ok) {
+      const msg =
+        typeof data === "object" && data?.message
+          ? data.message
+          : typeof data === "string" && data.length
+          ? data
+          : `HTTP ${res.status}`;
+      throw new Error(`[${res.status}] ${msg}`);
+    }
+
+    return data;
   }
 
-  async function loadData() {
+  async function loadCashouts() {
+    setLoading(true);
     try {
-      setLoading(true);
-      setError(null);
-
-      const [summaryRes, metricsRes, historyRes] = await Promise.all([
-        axios.get(`${BASE_URL}/wallet/summary`, { headers }),
-        axios.get(`${BASE_URL}/wallet/metrics`, { headers }),
-        axios.get(`${BASE_URL}/wallet/cashouts`, { headers }),
-      ]);
-
-      setSummary(summaryRes.data);
-      setMetrics(metricsRes.data);
-      setHistory(Array.isArray(historyRes.data) ? historyRes.data : []);
-    } catch (err: any) {
-      const desc = describeAxiosError(err);
-      console.log("LOAD ERROR:", desc);
-      setError(`Unable to load wallet data.\n${desc}`);
+      const list = await api(`/wallet/cashouts${QS}`);
+      setCashouts(Array.isArray(list) ? list : []);
+    } catch (e: any) {
+      Alert.alert("Load failed", String(e?.message || e));
     } finally {
       setLoading(false);
     }
   }
 
+  async function createCashout() {
+    const usd = Number(String(amountUsd || "").replace(/[^0-9.]/g, ""));
+    if (!isFinite(usd) || usd <= 0) {
+      Alert.alert("Invalid amount", "Enter a positive USD amount.");
+      return;
+    }
+
+    const amountCents = Math.round(usd * 100);
+
+    setPosting(true);
+    try {
+      await api(`/wallet/cashout${QS}`, {
+        method: "POST",
+        body: JSON.stringify({ amountCents }),
+      });
+
+      await loadCashouts();
+      Alert.alert("Success", `Cashout created for ${dollarsFromCents(amountCents)}.`);
+    } catch (e: any) {
+      Alert.alert("Cashout failed", String(e?.message || e));
+    } finally {
+      setPosting(false);
+    }
+  }
+
   useEffect(() => {
-    loadData();
+    loadCashouts();
   }, []);
 
-  async function requestCashout() {
-    try {
-      const usd = Number(String(amountUsd || "").replace(/[^0-9.]/g, ""));
-      if (!isFinite(usd) || usd <= 0) {
-        Alert.alert("Invalid amount", "Enter a positive USD amount.");
-        return;
-      }
-      const amountCents = Math.round(usd * 100);
-
-      setLoading(true);
-      console.log("CASHOUTS SCREEN — CREATE CASHOUT", { amountCents });
-
-      await axios.post(
-        `${BASE_URL}/wallet/cashout`,
-        { amountCents },
-        { headers }
-      );
-
-      await loadData();
-    } catch (err: any) {
-      const msg = describeAxiosError(err);
-      console.log("CASHOUT ERROR:", msg);
-      Alert.alert("Cashout failed", msg);
-      setLoading(false);
-    }
-  }
-
-  async function retryCashout(id: number) {
-    try {
-      setLoading(true);
-
-      await axios.post(
-        `${BASE_URL}/wallet/cashouts/${id}/retry`,
-        {},
-        { headers }
-      );
-
-      await loadData();
-    } catch (err: any) {
-      Alert.alert("Retry failed", describeAxiosError(err));
-      setLoading(false);
-    }
-  }
-
-  if (loading || !summary || !metrics) {
+  if (loading) {
     return (
-      <View
-        style={{
-          flex: 1,
-          backgroundColor: "#000",
-          justifyContent: "center",
-          alignItems: "center",
-        }}
-      >
-        <ActivityIndicator size="large" color="#0f0" />
+      <View style={styles.center}>
+        <ActivityIndicator size="large" />
       </View>
     );
   }
-
-  if (error) {
-    return (
-      <View
-        style={{
-          flex: 1,
-          backgroundColor: "#000",
-          justifyContent: "center",
-          alignItems: "center",
-          padding: 24,
-        }}
-      >
-        <Text
-          style={{
-            color: "#fff",
-            marginBottom: 14,
-            textAlign: "center",
-            whiteSpace: "pre-line" as any,
-          }}
-        >
-          {error}
-        </Text>
-        <TouchableOpacity
-          onPress={loadData}
-          style={{
-            backgroundColor: "#7CFC00",
-            paddingHorizontal: 30,
-            paddingVertical: 12,
-            borderRadius: 10,
-          }}
-        >
-          <Text style={{ color: "#000", fontWeight: "bold" }}>Retry</Text>
-        </TouchableOpacity>
-      </View>
-    );
-  }
-
-  const balance = (summary.balanceCents ?? 0) / 100;
-  const cashoutAvailable = (summary.cashoutAvailableCents ?? 0) / 100;
-
-  const totalCashouts = metrics.totalCashouts ?? 0;
-  const totalCompleted = metrics.totalCompleted ?? 0;
-  const totalFailed = metrics.totalFailed ?? 0;
-
-  const paidOut = (metrics.totalAmountPaidOut ?? 0) / 100;
-  const failedReturned = (metrics.totalAmountFailedReturned ?? 0) / 100;
 
   return (
-    <ScrollView style={{ flex: 1, backgroundColor: "#000", padding: 14 }}>
-      <View style={{ borderColor: "#0f0", borderWidth: 1, padding: 14, borderRadius: 10, marginBottom: 14 }}>
-        <Text style={{ color: "#0f0", fontSize: 18, fontWeight: "bold" }}>
-          Wallet Summary
-        </Text>
-        <Text style={{ color: "#fff", marginTop: 10 }}>
-          Balance: ${balance.toFixed(2)}
-        </Text>
-        <Text style={{ color: "#fff" }}>
-          Available for Cashout: ${cashoutAvailable.toFixed(2)}
-        </Text>
-      </View>
+    <View style={styles.root}>
+      <Text style={styles.title}>Owner Cashouts</Text>
 
-      <View style={{ borderColor: "#0f0", borderWidth: 1, padding: 14, borderRadius: 10, marginBottom: 14 }}>
-        <Text style={{ color: "#0f0", fontSize: 18, fontWeight: "bold" }}>
-          Cashout Metrics
-        </Text>
-        <Text style={{ color: "#fff", marginTop: 10 }}>
-          Total Cashouts: {totalCashouts}
-        </Text>
-        <Text style={{ color: "#fff" }}>Completed: {totalCompleted}</Text>
-        <Text style={{ color: "#fff" }}>Failed: {totalFailed}</Text>
-        <Text style={{ color: "#fff" }}>Paid Out: ${paidOut.toFixed(2)}</Text>
-        <Text style={{ color: "#fff" }}>
-          Failed Returned: ${failedReturned.toFixed(2)}
-        </Text>
-      </View>
-
-      <View style={{ borderColor: "#0f0", borderWidth: 1, padding: 14, borderRadius: 10, marginBottom: 14 }}>
-        <Text style={{ color: "#0f0", fontSize: 18, fontWeight: "bold" }}>
-          Create Cashout
-        </Text>
-
+      <View style={styles.card}>
+        <Text style={styles.label}>Amount (USD)</Text>
         <TextInput
           value={amountUsd}
           onChangeText={setAmountUsd}
-          placeholder="5"
-          placeholderTextColor="#666"
           keyboardType="numeric"
-          style={{
-            marginTop: 10,
-            backgroundColor: "#111",
-            color: "#fff",
-            padding: 10,
-            borderRadius: 8,
-            borderColor: "#222",
-            borderWidth: 1,
-          }}
+          placeholder="5"
+          placeholderTextColor="#6b7280"
+          style={styles.input}
         />
 
         <TouchableOpacity
-          onPress={requestCashout}
-          style={{
-            backgroundColor: "#7CFC00",
-            paddingVertical: 16,
-            borderRadius: 10,
-            alignItems: "center",
-            marginTop: 12,
-          }}
+          style={[styles.btn, posting ? styles.btnDisabled : null]}
+          onPress={createCashout}
+          disabled={posting}
         >
-          <Text style={{ color: "#000", fontSize: 16, fontWeight: "bold" }}>
-            REQUEST CASHOUT
-          </Text>
+          <Text style={styles.btnText}>{posting ? "Posting..." : "Cash Out"}</Text>
         </TouchableOpacity>
 
-        <Text style={{ color: "#777", marginTop: 10, fontSize: 12 }}>
-          Uses: GET {BASE_URL}/wallet/cashouts and POST {BASE_URL}/wallet/cashout
+        <Text style={styles.note}>
+          Uses: GET {BASE_URL}/wallet/cashouts{QS} and POST {BASE_URL}/wallet/cashout{QS}
         </Text>
       </View>
 
-      <Text style={{ color: "#0f0", fontSize: 20, marginBottom: 10 }}>
-        History
-      </Text>
-
-      {history.map((c) => {
-        const status = String(c.status || "").toUpperCase();
-        const isCompleted = status === "COMPLETED";
-        const isFailed = status === "FAILED";
-
-        return (
-          <View key={c.id} style={{ borderBottomColor: "#222", borderBottomWidth: 1, paddingVertical: 12 }}>
-            <Text style={{ color: "#fff", fontSize: 16, marginBottom: 4 }}>
-              #{c.id} — {dollarsFromCents(c.amountCents)}
-            </Text>
-
-            <Text style={{ color: isCompleted ? "#0f0" : isFailed ? "#f00" : "#fff" }}>
-              {status}
-            </Text>
-
-            {isFailed && (
-              <>
-                <Text style={{ color: "#ccc", marginBottom: 6 }}>
-                  Reason: {c.failureReason || "—"}
-                </Text>
-
-                <TouchableOpacity
-                  onPress={() => retryCashout(c.id)}
-                  style={{
-                    borderColor: "#0f0",
-                    borderWidth: 1,
-                    paddingVertical: 6,
-                    paddingHorizontal: 16,
-                    borderRadius: 8,
-                    width: 80,
-                    marginTop: 4,
-                  }}
-                >
-                  <Text style={{ color: "#0f0", textAlign: "center" }}>
-                    Retry
-                  </Text>
-                </TouchableOpacity>
-              </>
-            )}
+      <FlatList
+        data={cashouts}
+        keyExtractor={(i) => String(i.id)}
+        ItemSeparatorComponent={() => <View style={styles.sep} />}
+        renderItem={({ item }) => (
+          <View style={styles.row}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.amount}>{dollarsFromCents(item.amountCents)}</Text>
+              <Text style={styles.meta}>{String(item.createdAt || "")}</Text>
+              {item.failureReason ? (
+                <Text style={styles.fail}>Reason: {String(item.failureReason)}</Text>
+              ) : null}
+            </View>
+            <Text style={styles.status}>{String(item.status || "").toUpperCase()}</Text>
           </View>
-        );
-      })}
-    </ScrollView>
+        )}
+        ListEmptyComponent={<Text style={styles.empty}>No cashouts found.</Text>}
+      />
+    </View>
   );
 }
+
+const styles = StyleSheet.create({
+  root: { flex: 1, backgroundColor: "#0b0f19", padding: 16 },
+  center: { flex: 1, justifyContent: "center", alignItems: "center" },
+  title: { color: "white", fontSize: 22, marginBottom: 12, fontWeight: "700" },
+
+  card: {
+    backgroundColor: "#111827",
+    padding: 14,
+    borderRadius: 12,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: "#1f2937",
+  },
+  label: { color: "#9ca3af" },
+  input: {
+    backgroundColor: "#1f2937",
+    color: "white",
+    padding: 10,
+    borderRadius: 8,
+    marginVertical: 8,
+  },
+  btn: {
+    backgroundColor: "#10b981",
+    padding: 12,
+    borderRadius: 8,
+    alignItems: "center",
+  },
+  btnDisabled: { opacity: 0.6 },
+  btnText: { fontWeight: "bold", color: "#000" },
+  note: { color: "#9ca3af", marginTop: 10, fontSize: 12 },
+
+  sep: { height: 1, backgroundColor: "#1f2937" },
+  row: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 10,
+  },
+  amount: { color: "white", fontWeight: "800" },
+  meta: { color: "#9ca3af", fontSize: 12, marginTop: 2 },
+  fail: { color: "#fca5a5", fontSize: 12, marginTop: 4 },
+  status: { color: "#d1d5db", fontWeight: "800", marginLeft: 12 },
+  empty: { color: "#9ca3af", paddingTop: 8 },
+});
