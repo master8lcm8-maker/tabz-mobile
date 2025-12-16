@@ -9,7 +9,8 @@ import {
 } from 'react-native';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { apiGet } from '../../lib/api';
+import { apiGet } from '../../components/lib/api';
+
 
 
 
