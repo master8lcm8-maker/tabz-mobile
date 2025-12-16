@@ -17,8 +17,8 @@ import {
   View,
 } from 'react-native';
 
-import { BASE_URL, OWNER_TOKEN } from '../lib/api';
-import { OWNER_USER_ID } from '../lib/ownerToken';
+import { BASE_URL } from "./lib/api";
+import { OWNER_TOKEN, OWNER_USER_ID } from "../lib/ownerToken";
 
 type Summary = {
   balanceCents: number;
