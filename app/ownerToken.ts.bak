@@ -1,0 +1,17 @@
+// app/ownerToken.ts
+// NOTE: This is BOTH a config file and a dummy route so Expo Router stops complaining.
+
+import React from 'react';
+import { View } from 'react-native';
+
+// Your shared config
+export const BASE_URL = 'http://localhost:3000';
+
+// 🔐 SAME token you’re using in PowerShell
+export const OWNER_TOKEN =
+  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOjMsImVtYWlsIjoib3duZXIzQHRhYnouYXBwIiwicm9sZSI6ImJ1eWVyIiwiaWF0IjoxNzY1NTA0MTQ4LCJleHAiOjE3NjYxMDg5NDh9.DXHTW-nSHY55qXE9VY5lujcYikZd0LrYOWP5kg4mstM';
+
+// 🧱 Dummy screen so Expo Router sees a default export and shuts up
+export default function OwnerTokenPlaceholder() {
+  return <View />;
+}

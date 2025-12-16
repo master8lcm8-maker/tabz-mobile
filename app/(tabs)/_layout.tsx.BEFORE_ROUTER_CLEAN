@@ -1,0 +1,18 @@
+import { Tabs } from "expo-router";
+
+export default function TabsLayout() {
+  return (
+    <Tabs
+      screenOptions={{
+        headerShown: false,
+        tabBarActiveTintColor: "#16f597",
+        tabBarInactiveTintColor: "#9ca3af",
+        tabBarStyle: {
+          backgroundColor: "#05060A",
+          borderTopColor: "#111827",
+        },
+        tabBarLabelStyle: { fontSize: 11 },
+      }}
+    />
+  );
+}

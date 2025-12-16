@@ -1,0 +1,252 @@
+// app/(tabs)/owner-wallet.tsx
+import React, { useEffect, useMemo, useState } from "react";
+import {
+  ActivityIndicator,
+  FlatList,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
+import { useLocalSearchParams } from "expo-router";
+
+type Summary = {
+  id?: number;
+  userId?: number;
+  balanceCents?: number;
+  spendableBalanceCents?: number;
+  cashoutAvailableCents?: number;
+  [k: string]: any;
+};
+
+type Cashout = {
+  id?: number;
+  amountCents?: number;
+  status?: string;
+  createdAt?: string;
+  [k: string]: any;
+};
+
+// ✅ VERIFIED token from your PowerShell output (LOCKED)
+const OWNER_FRESH_TOKEN =
+  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOjMsImVtYWlsIjoib3duZXIzQHRhYnouYXBwIiwicm9sZSI6ImJ1eWVyIiwiaWF0IjoxNzY1NTkzNDg4LCJleHAiOjE3NjYxOTgyODh9.5dP5v6k_mmyCVRzIhLyFE00lV6kaV8SWFpLhtGMJJs4";
+
+// Your browser requests are already going to 10.0.0.239:3000 (per DevTools).
+const DEFAULT_BASE_URL = "http://10.0.0.239:3000";
+
+function dollars(cents?: number) {
+  const v = Number(cents || 0) || 0;
+  return `$${(v / 100).toFixed(2)}`;
+}
+
+export default function OwnerWalletTab() {
+  const params = useLocalSearchParams();
+
+  const baseUrl = useMemo(() => {
+    const p = params?.baseUrl;
+    return typeof p === "string" && p.startsWith("http") ? p : DEFAULT_BASE_URL;
+  }, [params]);
+
+  const token = useMemo(() => {
+    const incoming = params?.token;
+    if (typeof incoming === "string" && incoming.startsWith("eyJ")) {
+      // If the URL is stale (old token), FORCE the known-good PowerShell token.
+      if (incoming !== OWNER_FRESH_TOKEN) {
+        console.warn(
+          "[owner-wallet] Incoming token does not match PowerShell token. Forcing PowerShell token."
+        );
+        return OWNER_FRESH_TOKEN;
+      }
+      return incoming;
+    }
+    return OWNER_FRESH_TOKEN;
+  }, [params]);
+
+  const [loading, setLoading] = useState(true);
+  const [err, setErr] = useState<string | null>(null);
+
+  const [summary, setSummary] = useState<Summary | null>(null);
+  const [cashouts, setCashouts] = useState<Cashout[]>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function fetchJson(path: string) {
+      const url = `${baseUrl}${path}`;
+      const res = await fetch(url, {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+      });
+
+      const text = await res.text();
+      let data: any = null;
+      try {
+        data = text ? JSON.parse(text) : null;
+      } catch {
+        data = text;
+      }
+
+      if (!res.ok) {
+        const msg =
+          typeof data === "object" && data?.message
+            ? data.message
+            : `HTTP ${res.status}`;
+        throw new Error(msg);
+      }
+
+      return data;
+    }
+
+    async function run() {
+      setLoading(true);
+      setErr(null);
+
+      // Console proof (so we can confirm it’s using the correct values)
+      console.log("[owner-wallet] baseUrl =", baseUrl);
+      console.log("[owner-wallet] token(first20) =", token.slice(0, 20), "...");
+
+      try {
+        const s = await fetchJson("/wallet/summary");
+        const c = await fetchJson("/wallet/cashouts");
+
+        if (!cancelled) {
+          setSummary(s);
+          setCashouts(Array.isArray(c) ? c : []);
+        }
+      } catch (e: any) {
+        if (!cancelled) setErr(String(e?.message || e));
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+
+    run();
+    return () => {
+      cancelled = true;
+    };
+  }, [baseUrl, token]);
+
+  return (
+    <View style={styles.root}>
+      <Text style={styles.title}>Owner Wallet</Text>
+      <Text style={styles.subtitle}>Live backend totals for Owner3.</Text>
+
+      {err ? (
+        <View style={[styles.alert, styles.alertBad]}>
+          <Text style={styles.alertText}>wallet HTTP {err}</Text>
+        </View>
+      ) : null}
+
+      <View style={styles.card}>
+        <Text style={styles.cardTitle}>BALANCES</Text>
+
+        {loading ? (
+          <View style={{ paddingVertical: 18 }}>
+            <ActivityIndicator />
+          </View>
+        ) : (
+          <>
+            <View style={styles.row}>
+              <Text style={styles.rowKey}>Balance</Text>
+              <Text style={styles.rowVal}>
+                {dollars(summary?.balanceCents)}
+              </Text>
+            </View>
+
+            <View style={styles.row}>
+              <Text style={styles.rowKey}>Spendable</Text>
+              <Text style={styles.rowVal}>
+                {dollars(summary?.spendableBalanceCents)}
+              </Text>
+            </View>
+
+            <View style={styles.row}>
+              <Text style={styles.rowKey}>Cashout Available</Text>
+              <Text style={styles.rowVal}>
+                {dollars(summary?.cashoutAvailableCents)}
+              </Text>
+            </View>
+          </>
+        )}
+      </View>
+
+      <View style={styles.card}>
+        <Text style={styles.cardTitle}>CASHOUTS</Text>
+        {loading ? (
+          <View style={{ paddingVertical: 18 }}>
+            <ActivityIndicator />
+          </View>
+        ) : (
+          <FlatList
+            data={cashouts.slice(0, 20)}
+            keyExtractor={(item, idx) => String(item?.id ?? idx)}
+            ItemSeparatorComponent={() => <View style={styles.sep} />}
+            renderItem={({ item }) => {
+              const st = String(item?.status || "").toUpperCase();
+              return (
+                <View style={styles.cashoutRow}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.cashoutAmt}>
+                      {dollars(item?.amountCents)}
+                    </Text>
+                    <Text style={styles.cashoutMeta}>
+                      {item?.createdAt ? String(item.createdAt) : ""}
+                    </Text>
+                  </View>
+                  <Text style={styles.cashoutStatus}>{st}</Text>
+                </View>
+              );
+            }}
+            ListEmptyComponent={
+              <Text style={styles.muted}>No cashouts found.</Text>
+            }
+          />
+        )}
+      </View>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  root: { flex: 1, backgroundColor: "#070A12", padding: 16 },
+  title: { color: "white", fontSize: 22, fontWeight: "700", marginBottom: 4 },
+  subtitle: { color: "#9AA4B2", marginBottom: 12 },
+
+  alert: {
+    borderRadius: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    marginBottom: 12,
+    borderWidth: 1,
+  },
+  alertBad: {
+    backgroundColor: "rgba(255,0,0,0.10)",
+    borderColor: "rgba(255,0,0,0.35)",
+  },
+  alertText: { color: "#FF6B6B", fontWeight: "600" },
+
+  card: {
+    backgroundColor: "rgba(255,255,255,0.04)",
+    borderColor: "rgba(255,255,255,0.08)",
+    borderWidth: 1,
+    borderRadius: 14,
+    padding: 14,
+    marginBottom: 12,
+  },
+  cardTitle: { color: "white", fontWeight: "700", marginBottom: 10 },
+
+  row: { flexDirection: "row", justifyContent: "space-between", marginBottom: 8 },
+  rowKey: { color: "#D7DBE3" },
+  rowVal: { color: "white", fontWeight: "800" },
+
+  sep: { height: 1, backgroundColor: "rgba(255,255,255,0.08)", marginVertical: 10 },
+
+  cashoutRow: { flexDirection: "row", alignItems: "center" },
+  cashoutAmt: { color: "white", fontWeight: "800" },
+  cashoutMeta: { color: "#9AA4B2", fontSize: 12, marginTop: 2 },
+  cashoutStatus: { color: "#D7DBE3", fontWeight: "700" },
+
+  muted: { color: "#B9C2CF" },
+});
