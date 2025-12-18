@@ -1,5 +1,5 @@
 // app/(tabs)/buyer-orders.tsx
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -8,7 +8,9 @@ import {
   Text,
   View,
 } from 'react-native';
-import { apiGet } from '../../components/lib/api';
+import { useLocalSearchParams } from 'expo-router';
+
+import { DEFAULT_BASE_URL, getAuthHeaders, hasAuthToken } from '@/lib/tabz-api';
 
 type BuyerOrder = {
   // NEW API shape (current backend)
@@ -20,8 +22,6 @@ type BuyerOrder = {
   amountCents?: number;
   feeCents?: number;
   venueId?: number;
-  venueName?: string;
-  payoutCents?: number;
 
   // Legacy/alternate (just in case)
   id?: number;
@@ -29,11 +29,9 @@ type BuyerOrder = {
   totalCents?: number;
 };
 
-type WhoAmI = {
-  userId?: number;
-  email?: string;
-  role?: string;
-};
+function toStr(x: any) {
+  return typeof x === 'string' ? x : Array.isArray(x) ? x[0] : '';
+}
 
 function formatMoney(cents?: number) {
   if (typeof cents !== 'number') return '-';
@@ -44,34 +42,85 @@ function pickKey(o: BuyerOrder) {
   return String(o.orderId ?? o.id ?? Math.random());
 }
 
-function normalizeOrders(payload: any): BuyerOrder[] {
-  if (Array.isArray(payload)) return payload;
-  if (Array.isArray(payload?.value)) return payload.value;
-  return [];
-}
-
 export default function BuyerOrdersScreen() {
-  const [orders, setOrders] = useState<BuyerOrder[]>([]);
-  const [who, setWho] = useState<WhoAmI | null>(null);
+  const params = useLocalSearchParams();
 
+  // Phase 2.1: still allow baseUrl override, but auth comes from tabz-api (not URL, not dev-login)
+  const baseUrlFromUrl = toStr((params as any).baseUrl);
+
+  const BASE_URL = useMemo(() => {
+    const b = baseUrlFromUrl?.trim();
+    return b && b.length > 0 ? b : DEFAULT_BASE_URL;
+  }, [baseUrlFromUrl]);
+
+  const [orders, setOrders] = useState<BuyerOrder[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const [who, setWho] = useState<{ userId?: number; email?: string; role?: string } | null>(null);
+
+  const fetchWhoAmI = useCallback(async () => {
+    try {
+      if (!hasAuthToken()) {
+        setWho(null);
+        return null;
+      }
+
+      const res = await fetch(`${BASE_URL}/auth/me`, {
+        method: 'GET',
+        headers: getAuthHeaders(),
+        cache: 'no-store' as any,
+      });
+
+      if (!res.ok) {
+        setWho(null);
+        return null;
+      }
+
+      const data = await res.json();
+      const identity = {
+        userId: data?.userId,
+        email: data?.email,
+        role: data?.role,
+      };
+      setWho(identity);
+      return identity;
+    } catch {
+      setWho(null);
+      return null;
+    }
+  }, [BASE_URL]);
 
   const fetchBuyerOrders = useCallback(async () => {
     setError(null);
 
     try {
-      // Global auth: token is injected by apiGet() from components/lib/api.ts
-      const me = await apiGet('/auth/me').catch(() => null);
-      setWho(
-        me
-          ? { userId: me?.userId, email: me?.email, role: me?.role }
-          : null,
-      );
+      // Phase 2.1 hardening: no auto-login, no URL token
+      if (!hasAuthToken()) {
+        throw new Error('Not authenticated. Set auth token before loading Buyer Orders.');
+      }
 
-      const data = await apiGet('/store-items/my-orders');
-      setOrders(normalizeOrders(data));
+      await fetchWhoAmI();
+
+      const res = await fetch(`${BASE_URL}/store-items/my-orders`, {
+        method: 'GET',
+        headers: getAuthHeaders(),
+        cache: 'no-store' as any,
+      });
+
+      if (!res.ok) {
+        const txt = await res.text().catch(() => '');
+        throw new Error(`GET /store-items/my-orders failed: ${res.status} ${txt}`);
+      }
+
+      const data = await res.json();
+      const arr: any[] = Array.isArray(data)
+        ? data
+        : Array.isArray(data?.value)
+        ? data.value
+        : [];
+      setOrders(arr);
     } catch (e: any) {
       setOrders([]);
       setError(e?.message || 'Failed to load orders');
@@ -79,7 +128,7 @@ export default function BuyerOrdersScreen() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, []);
+  }, [BASE_URL, fetchWhoAmI]);
 
   useEffect(() => {
     fetchBuyerOrders();
@@ -103,10 +152,13 @@ export default function BuyerOrdersScreen() {
     <View style={styles.container}>
       <Text style={styles.title}>My Orders</Text>
 
-      <Text style={styles.debug}>
-        Token source: GLOBAL AUTH (login) • User:{' '}
-        {who?.email ?? 'unknown'} (id {who?.userId ?? '?'}, role {who?.role ?? '?'})
-      </Text>
+      {who ? (
+        <Text style={styles.debug}>
+          Token user: {who.email ?? 'unknown'} (id {who.userId ?? '?'}, role {who.role ?? '?'})
+        </Text>
+      ) : (
+        <Text style={styles.debug}>Token user: (unknown / not authenticated)</Text>
+      )}
 
       {error ? <Text style={styles.error}>{error}</Text> : null}
 

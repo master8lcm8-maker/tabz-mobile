@@ -1,4 +1,4 @@
-// components/CashoutsScreen.tsx
+// app/(tabs)/owner-cashouts.tsx
 import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
@@ -11,11 +11,18 @@ import {
   View,
 } from "react-native";
 
-import { BASE_URL } from "./lib/api";
-import { OWNER_TOKEN } from "../lib/ownerToken";
+// 🔒 VERIFIED WORKING VALUES
+const BASE_URL = "http://10.0.0.239:3000";
+const OWNER_TOKEN =
+  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOjMsImVtYWlsIjoib3duZXIzQHRhYnouYXBwIiwicm9sZSI6ImJ1eWVyIiwiaWF0IjoxNzY1NTkzNDg4LCJleHAiOjE3NjYxOTgyODh9.5dP5v6k_mmyCVRzIhLyFE00lV6kaV8SWFpLhtGMJJs4";
+
+// ✅ Web-safe: use query param instead of x-user-id header
+const USER_ID = "3";
+const QS = `?userId=${encodeURIComponent(USER_ID)}`;
 
 type Cashout = {
   id: number;
+  walletId?: number;
   amountCents: number;
   status: string;
   failureReason?: string | null;
@@ -28,14 +35,15 @@ function dollarsFromCents(cents?: number) {
   return `$${(v / 100).toFixed(2)}`;
 }
 
-export default function CashoutsScreen() {
+export default function OwnerCashoutsTab() {
   const [loading, setLoading] = useState(true);
   const [posting, setPosting] = useState(false);
   const [cashouts, setCashouts] = useState<Cashout[]>([]);
   const [amountUsd, setAmountUsd] = useState("5");
 
   async function api(path: string, init?: RequestInit) {
-    const res = await fetch(`${BASE_URL}${path}`, {
+    const url = `${BASE_URL}${path}`;
+    const res = await fetch(url, {
       ...(init || {}),
       headers: {
         Authorization: `Bearer ${OWNER_TOKEN}`,
@@ -45,7 +53,7 @@ export default function CashoutsScreen() {
     });
 
     const text = await res.text();
-    let data: any;
+    let data: any = null;
     try {
       data = text ? JSON.parse(text) : null;
     } catch {
@@ -56,10 +64,10 @@ export default function CashoutsScreen() {
       const msg =
         typeof data === "object" && data?.message
           ? data.message
-          : typeof data === "string"
+          : typeof data === "string" && data.length
           ? data
           : `HTTP ${res.status}`;
-      throw new Error(msg);
+      throw new Error(`[${res.status}] ${msg}`);
     }
 
     return data;
@@ -68,7 +76,8 @@ export default function CashoutsScreen() {
   async function loadCashouts() {
     setLoading(true);
     try {
-      const list = await api("/wallet/cashouts");
+      // ✅ GET /wallet/cashouts (plural)
+      const list = await api(`/wallet/cashouts${QS}`);
       setCashouts(Array.isArray(list) ? list : []);
     } catch (e: any) {
       Alert.alert("Load failed", String(e?.message || e));
@@ -78,23 +87,24 @@ export default function CashoutsScreen() {
   }
 
   async function createCashout() {
-    const usd = Number(amountUsd);
+    const usd = Number(String(amountUsd || "").replace(/[^0-9.]/g, ""));
     if (!isFinite(usd) || usd <= 0) {
-      Alert.alert("Invalid amount");
+      Alert.alert("Invalid amount", "Enter a positive USD amount.");
       return;
     }
 
+    const amountCents = Math.round(usd * 100);
+
     setPosting(true);
     try {
-      await api("/wallet/cashout", {
+      // ✅ POST /wallet/cashout (singular) with body { amountCents }
+      await api(`/wallet/cashout${QS}`, {
         method: "POST",
-        body: JSON.stringify({
-          amountCents: Math.round(usd * 100),
-        }),
+        body: JSON.stringify({ amountCents }),
       });
 
       await loadCashouts();
-      Alert.alert("Success", "Cashout submitted.");
+      Alert.alert("Success", `Cashout created for ${dollarsFromCents(amountCents)}.`);
     } catch (e: any) {
       Alert.alert("Cashout failed", String(e?.message || e));
     } finally {
@@ -124,34 +134,41 @@ export default function CashoutsScreen() {
           value={amountUsd}
           onChangeText={setAmountUsd}
           keyboardType="numeric"
+          placeholder="5"
+          placeholderTextColor="#6b7280"
           style={styles.input}
         />
 
         <TouchableOpacity
-          style={[styles.btn, posting && styles.btnDisabled]}
+          style={[styles.btn, posting ? styles.btnDisabled : null]}
           onPress={createCashout}
           disabled={posting}
         >
-          <Text style={styles.btnText}>
-            {posting ? "Posting..." : "Cash Out"}
-          </Text>
+          <Text style={styles.btnText}>{posting ? "Posting..." : "Cash Out"}</Text>
         </TouchableOpacity>
+
+        <Text style={styles.note}>
+          Uses: GET {BASE_URL}/wallet/cashouts{QS} and POST {BASE_URL}/wallet/cashout{QS}
+        </Text>
       </View>
 
       <FlatList
         data={cashouts}
         keyExtractor={(i) => String(i.id)}
+        ItemSeparatorComponent={() => <View style={styles.sep} />}
         renderItem={({ item }) => (
           <View style={styles.row}>
-            <Text style={styles.amount}>
-              {dollarsFromCents(item.amountCents)}
-            </Text>
-            <Text style={styles.status}>{item.status}</Text>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.amount}>{dollarsFromCents(item.amountCents)}</Text>
+              <Text style={styles.meta}>{String(item.createdAt || "")}</Text>
+              {item.failureReason ? (
+                <Text style={styles.fail}>Reason: {String(item.failureReason)}</Text>
+              ) : null}
+            </View>
+            <Text style={styles.status}>{String(item.status || "").toUpperCase()}</Text>
           </View>
         )}
-        ListEmptyComponent={
-          <Text style={styles.empty}>No cashouts found.</Text>
-        }
+        ListEmptyComponent={<Text style={styles.empty}>No cashouts found.</Text>}
       />
     </View>
   );
@@ -160,8 +177,16 @@ export default function CashoutsScreen() {
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: "#0b0f19", padding: 16 },
   center: { flex: 1, justifyContent: "center", alignItems: "center" },
-  title: { color: "white", fontSize: 22, fontWeight: "700" },
-  card: { backgroundColor: "#111827", padding: 14, borderRadius: 12 },
+  title: { color: "white", fontSize: 22, marginBottom: 12, fontWeight: "700" },
+
+  card: {
+    backgroundColor: "#111827",
+    padding: 14,
+    borderRadius: 12,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: "#1f2937",
+  },
   label: { color: "#9ca3af" },
   input: {
     backgroundColor: "#1f2937",
@@ -178,12 +203,17 @@ const styles = StyleSheet.create({
   },
   btnDisabled: { opacity: 0.6 },
   btnText: { fontWeight: "bold", color: "#000" },
+  note: { color: "#9ca3af", marginTop: 10, fontSize: 12 },
+
+  sep: { height: 1, backgroundColor: "#1f2937" },
   row: {
     flexDirection: "row",
-    justifyContent: "space-between",
+    alignItems: "center",
     paddingVertical: 10,
   },
   amount: { color: "white", fontWeight: "800" },
-  status: { color: "#9ca3af" },
-  empty: { color: "#9ca3af", marginTop: 12 },
+  meta: { color: "#9ca3af", fontSize: 12, marginTop: 2 },
+  fail: { color: "#fca5a5", fontSize: 12, marginTop: 4 },
+  status: { color: "#d1d5db", fontWeight: "800", marginLeft: 12 },
+  empty: { color: "#9ca3af", paddingTop: 8 },
 });

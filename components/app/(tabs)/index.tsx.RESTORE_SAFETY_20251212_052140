@@ -1,0 +1,13 @@
+import React from "react";
+import { View, Text } from "react-native";
+
+export default function TabzHome() {
+  return (
+    <View style={{ flex: 1, backgroundColor: "#05060E", padding: 18, paddingTop: 20 }}>
+      <Text style={{ color: "#16f597", fontSize: 24, fontWeight: "800" }}>TABZ</Text>
+      <Text style={{ color: "rgba(255,255,255,0.75)", marginTop: 10 }}>
+        Home is back. Your tabs + screens are still there.
+      </Text>
+    </View>
+  );
+}
