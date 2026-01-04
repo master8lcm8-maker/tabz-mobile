@@ -1,91 +1,198 @@
 // components/lib/api.ts
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { Platform } from "react-native";
+
+// Persisted keys
+const BASEURL_KEY = "TABZ_API_BASE_URL";
+const AUTH_TOKEN_KEY = "TABZ_AUTH_TOKEN";
 
 // Default backend base URL (can be overridden via setBaseUrl)
-let BASE_URL = "http://10.0.0.239:3000";
+// ✅ WEB must NOT default to localhost (single source of truth)
+export let BASE_URL = "http://10.0.0.239:3000";
 
-// 🔐 Fallback token (only used if nothing else is set)
-const OWNER_FALLBACK_TOKEN =
+// 🔐 Fallback token (DEV ONLY). WEB MUST NEVER use fallback.
+const DEV_FALLBACK_TOKEN =
   "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOjMsImVtYWlsIjoib3duZXIzQHRhYnouYXBwIiwicm9sZSI6ImJ1eWVyIiwiaWF0IjoxNzY1NTkzNDg4LCJleHAiOjE3NjYxOTgyODh9.5dP5v6k_mmyCVRzIhLyFE00lV6kaV8SWFpLhtGMJJs4";
 
 let accessToken: string | null = null;
 
-// DEV user resolver (locked behavior from your file)
+// DEV user resolver (locked behavior)
 let devUserId: string = "3";
 export function setDevUserId(userId: string) {
   devUserId = String(userId || "3");
 }
-function getUserHeader() {
-  return { "x-user-id": devUserId };
+
+// ---------------------------
+// TOKEN / BASE URL PERSISTENCE
+// ---------------------------
+async function storageSet(key: string, val: string) {
+  if (Platform.OS === "web") {
+    try {
+      localStorage.setItem(key, val);
+    } catch {}
+    return;
+  }
+  await AsyncStorage.setItem(key, val);
+}
+
+async function storageGet(key: string): Promise<string | null> {
+  if (Platform.OS === "web") {
+    try {
+      return localStorage.getItem(key);
+    } catch {
+      return null;
+    }
+  }
+  return await AsyncStorage.getItem(key);
+}
+
+async function storageRemove(key: string) {
+  if (Platform.OS === "web") {
+    try {
+      localStorage.removeItem(key);
+    } catch {}
+    return;
+  }
+  await AsyncStorage.removeItem(key);
 }
 
 // ---------------------------
-// BASE URL HELPERS (FIXES YOUR CRASH)
+// BASE URL HELPERS
 // ---------------------------
 export function setBaseUrl(url: string) {
   const u = String(url || "").trim();
-  if (u) BASE_URL = u;
+  if (!u) return;
+
+  BASE_URL = u;
+  storageSet(BASEURL_KEY, u).catch(() => {});
 }
+
 export function getBaseUrl() {
   return BASE_URL;
 }
 
+// Call once on app boot
+export async function hydrateBaseUrl(): Promise<string> {
+  const saved = await storageGet(BASEURL_KEY);
+  const u = saved ? String(saved).trim() : "";
+  if (u) BASE_URL = u;
+  return BASE_URL;
+}
+
 // ---------------------------
-// TOKEN HELPERS
+// AUTH TOKEN HELPERS
 // ---------------------------
-export function setAuthToken(token: string | null) {
+export async function hydrateAuthToken(): Promise<string | null> {
+  const saved = await storageGet(AUTH_TOKEN_KEY);
+  const t = saved ? String(saved).trim() : null;
+  accessToken = t && t.length > 0 ? t : null;
+  return accessToken;
+}
+
+export async function clearAuthToken() {
+  accessToken = null;
+  await storageRemove(AUTH_TOKEN_KEY);
+}
+
+export async function setAuthToken(token: string | null) {
   accessToken = token ? String(token).trim() : null;
+
+  if (accessToken) {
+    await storageSet(AUTH_TOKEN_KEY, accessToken);
+  } else {
+    await storageRemove(AUTH_TOKEN_KEY);
+  }
 }
 
 export function getAuthToken(): string | null {
   return accessToken;
 }
 
-export function getEffectiveToken(): string {
-  return accessToken ?? OWNER_FALLBACK_TOKEN;
-}
+/**
+ * 🔥 CRITICAL RULE:
+ * - WEB: MUST have accessToken (TABZ_AUTH_TOKEN). NEVER fallback.
+ * - NATIVE: can fallback (DEV), if accessToken isn't set.
+ */
+function getEffectiveTokenOrThrow(): string {
+  const t = accessToken ? String(accessToken).trim() : "";
 
-function getAuthHeader() {
-  const token = getEffectiveToken();
-  return { Authorization: `Bearer ${token}` };
+  if (Platform.OS === "web") {
+    if (!t) {
+      throw new Error(
+        "AUTH_MISSING_WEB: No TABZ_AUTH_TOKEN set. On web we NEVER use fallback."
+      );
+    }
+    return t;
+  }
+
+  // native/dev fallback allowed
+  return t || DEV_FALLBACK_TOKEN;
 }
 
 // ---------------------------
 // REQUEST WRAPPER
 // ---------------------------
+function buildAuthHeaders(token: string): Record<string, string> {
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${token}`,
+    "Cache-Control": "no-cache",
+    Pragma: "no-cache",
+  };
+
+  // native dev behavior: support x-user-id for your backend dev routing
+  if (Platform.OS !== "web") {
+    headers["x-user-id"] = devUserId;
+  }
+
+  return headers;
+}
+
+function buildJsonHeaders(token: string): Record<string, string> {
+  return {
+    ...buildAuthHeaders(token),
+    "Content-Type": "application/json",
+  };
+}
+
+function unwrapResponse<T = any>(data: any): T {
+  if (
+    data &&
+    typeof data === "object" &&
+    !Array.isArray(data) &&
+    "value" in data
+  ) {
+    return (data as any).value as T;
+  }
+  return data as T;
+}
+
 async function request(method: "GET" | "POST", path: string, body?: any) {
   const url = BASE_URL + path;
+  const token = getEffectiveTokenOrThrow();
 
   const init: RequestInit = {
     method,
-    headers: {
-      "Content-Type": "application/json",
-      ...getAuthHeader(),
-      ...getUserHeader(),
-      "Cache-Control": "no-cache",
-      Pragma: "no-cache",
-    },
+    headers: buildJsonHeaders(token),
   };
 
   if (body !== undefined) {
     (init as any).body = JSON.stringify(body);
   }
 
-  console.log(`🔍 ${method}`, url, body ?? "");
-
   const res = await fetch(url, init);
 
   let data: any = null;
   try {
     data = await res.json();
-  } catch {
-    // ignore
-  }
+  } catch {}
 
   if (!res.ok) {
-    throw new Error(`${method} ${path} failed: ${res.status} - ${JSON.stringify(data)}`);
+    throw new Error(
+      `${method} ${path} failed: ${res.status} - ${JSON.stringify(data)}`
+    );
   }
 
-  return data;
+  return unwrapResponse(data);
 }
 
 export function apiGet(path: string) {
@@ -96,32 +203,213 @@ export function apiPost(path: string, body: any = {}) {
   return request("POST", path, body);
 }
 
-// ---------------------------
-// LOGIN
-// ---------------------------
-export async function loginWithPassword(email: string, password: string) {
-  const url = `${BASE_URL}/auth/login`;
+/**
+ * Multipart upload helper (for /profiles/me/avatar and /profiles/me/cover)
+ * - WEB: pass a File object
+ * - NATIVE: pass { uri, name, type }
+ */
+export type NativeFile = { uri: string; name: string; type: string };
+
+export async function apiUploadMultipart(
+  path: string,
+  file: File | Blob | NativeFile,
+  fieldName: string = "file"
+) {
+  const url = BASE_URL + path;
+  const token = getEffectiveTokenOrThrow();
+
+  const fd = new FormData();
+
+  if (Platform.OS === "web") {
+    // Browser: File/Blob
+    const f = file as any;
+    // If it's a Blob without a name, give it one
+    const name =
+      typeof f?.name === "string" && f.name.trim().length > 0
+        ? f.name
+        : "upload.png";
+    fd.append(fieldName, f, name);
+  } else {
+    // React Native / Expo: { uri, name, type }
+    const nf = file as NativeFile;
+    fd.append(fieldName, {
+      uri: nf.uri,
+      name: nf.name || "upload.png",
+      type: nf.type || "image/png",
+    } as any);
+  }
 
   const res = await fetch(url, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email, password }),
+    headers: {
+      ...buildAuthHeaders(token),
+      // IMPORTANT: do NOT set Content-Type for multipart; fetch sets boundary.
+    } as any,
+    body: fd as any,
   });
 
   let data: any = null;
   try {
     data = await res.json();
-  } catch {
-    // ignore
-  }
+  } catch {}
 
   if (!res.ok) {
-    throw new Error(`Login failed: ${res.status} - ${JSON.stringify(data)}`);
+    throw new Error(
+      `POST ${path} failed: ${res.status} - ${JSON.stringify(data)}`
+    );
   }
 
-  const token: string = data?.access_token || data?.accessToken || data?.token;
-  if (!token) throw new Error("No access_token returned by backend");
+  return unwrapResponse(data);
+}
 
-  setAuthToken(token);
-  return token;
+// Convenience wrappers
+export function uploadMyAvatar(file: File | Blob | NativeFile) {
+  return apiUploadMultipart("/profiles/me/avatar", file, "file");
+}
+export function uploadMyCover(file: File | Blob | NativeFile) {
+  return apiUploadMultipart("/profiles/me/cover", file, "file");
+}
+
+// ---------------------------
+// LOGIN (WEB-FIRST)
+// ---------------------------
+export async function loginWithPassword(
+  email: string,
+  password: string
+): Promise<string> {
+  const endpoints = [
+    "/auth/login-owner",
+    "/auth/login-buyer",
+    "/auth/login-staff",
+    "/auth/login",
+  ];
+
+  let lastErr: any = null;
+
+  for (const ep of endpoints) {
+    try {
+      const res = await fetch(`${BASE_URL}${ep}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password }),
+      });
+
+      let data: any = null;
+      try {
+        data = await res.json();
+      } catch {}
+
+      if (!res.ok) {
+        lastErr = { ep, status: res.status, data };
+        continue;
+      }
+
+      const token = data?.access_token || data?.accessToken || data?.token;
+
+      if (!token) {
+        lastErr = { ep, status: res.status, data };
+        continue;
+      }
+
+      await setAuthToken(token);
+      return token;
+    } catch (e: any) {
+      lastErr = { ep, error: String(e?.message || e) };
+    }
+  }
+
+  throw new Error(
+    `Login failed on all endpoints. Last error: ${JSON.stringify(lastErr)}`
+  );
+}
+
+// ==================================================
+// ROLE GUARD UTILITIES
+// ==================================================
+export type JwtClaims = {
+  sub?: number;
+  userId?: number;
+  role?: string;
+  email?: string;
+  iat?: number;
+  exp?: number;
+  [k: string]: any;
+};
+
+function base64UrlToBase64(input: string) {
+  let s = String(input || "").replace(/-/g, "+").replace(/_/g, "/");
+  while (s.length % 4 !== 0) s += "=";
+  return s;
+}
+
+function safeDecodeBase64ToUtf8(b64: string): string | null {
+  try {
+    if (typeof atob === "function") return atob(b64);
+  } catch {}
+
+  try {
+    const B = (global as any)?.Buffer || require("buffer").Buffer;
+    return B.from(b64, "base64").toString("utf8");
+  } catch {}
+
+  return null;
+}
+
+export function decodeJwtClaims(token?: string | null): JwtClaims | null {
+  const t = String(token || "").trim();
+  if (!t) return null;
+
+  const parts = t.split(".");
+  if (parts.length < 2) return null;
+
+  const payloadJson = safeDecodeBase64ToUtf8(base64UrlToBase64(parts[1]));
+  if (!payloadJson) return null;
+
+  try {
+    const obj = JSON.parse(payloadJson);
+    return obj && typeof obj === "object" ? obj : null;
+  } catch {
+    return null;
+  }
+}
+
+export function getActiveClaims(): JwtClaims | null {
+  const token = getEffectiveTokenOrThrow();
+  return decodeJwtClaims(token);
+}
+
+export function requireRole(required: "owner" | "buyer"): JwtClaims {
+  const claims = getActiveClaims();
+  const role = String(claims?.role || "").toLowerCase();
+
+  if (role !== required) {
+    throw new Error(`ROLE_GUARD: required=${required} tokenRole=${role}`);
+  }
+
+  return claims!;
+}
+
+// ==================================================
+// BANK INFO GUARD
+// ==================================================
+export type BankInfoSummary = {
+  hasBankInfo: boolean;
+  bankName: string | null;
+  last4: string | null;
+  raw?: any;
+};
+
+export async function getBankInfoSummary(): Promise<BankInfoSummary> {
+  const info: any = await apiGet("/wallet/bank-info");
+
+  if (!info || typeof info !== "object") {
+    return { hasBankInfo: false, bankName: null, last4: null };
+  }
+
+  return {
+    hasBankInfo: true,
+    bankName: info.bankNameEnc ?? info.bankName ?? null,
+    last4: info.accountLast4 ?? null,
+    raw: info,
+  };
 }
