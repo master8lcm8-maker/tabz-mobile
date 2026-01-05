@@ -2,7 +2,7 @@
 import { router } from "expo-router";
 import { useState } from "react";
 import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
-import { loginWithPassword, setBaseUrl } from "../../components/lib/api";
+import { decodeJwtClaims, loginWithPassword, setBaseUrl } from "../../components/lib/api";
 
 export default function LoginScreen() {
   const [email, setEmail] = useState("buyer@tabz.app");
@@ -18,10 +18,16 @@ export default function LoginScreen() {
       // Ensure correct backend before login
       setBaseUrl("http://10.0.0.239:3000");
 
-      await loginWithPassword(email.trim(), password);
+      const token = await loginWithPassword(email.trim(), password);
+      const role = String(decodeJwtClaims(token)?.role || "").toLowerCase();
 
-      // Go to TABZ (tabs group)
-      router.replace("/");
+      // Role-aware redirect (NEW)
+      if (role === "staff") {
+        router.replace("/staff");
+      } else {
+        // Go to TABZ (tabs group)
+        router.replace("/");
+      }
     } catch (err: any) {
       const msg = err?.message || "Login failed";
       setError(msg);
@@ -59,7 +65,9 @@ export default function LoginScreen() {
       {error ? <Text style={styles.error}>{error}</Text> : null}
 
       <Pressable onPress={handleLogin} disabled={loading} style={styles.button}>
-        <Text style={styles.buttonText}>{loading ? "Logging in…" : "Log in"}</Text>
+        <Text style={styles.buttonText}>
+          {loading ? "Logging in…" : "Log in"}
+        </Text>
       </Pressable>
     </View>
   );
