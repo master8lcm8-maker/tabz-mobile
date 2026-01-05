@@ -378,7 +378,7 @@ export function getActiveClaims(): JwtClaims | null {
   return decodeJwtClaims(token);
 }
 
-export function requireRole(required: "owner" | "buyer"): JwtClaims {
+export function requireRole(required: "owner" | "buyer" | "staff"): JwtClaims {
   const claims = getActiveClaims();
   const role = String(claims?.role || "").toLowerCase();
 
@@ -387,6 +387,44 @@ export function requireRole(required: "owner" | "buyer"): JwtClaims {
   }
 
   return claims!;
+}
+
+// ==================================================
+// STAFF ORDERS (M28.2)
+// ==================================================
+export type StaffOrderRow = {
+  orderId: number;
+  createdAt: string;
+  status: string;
+  itemName: string;
+  quantity: number;
+  amountCents: number;
+  feeCents: number;
+  payoutCents: number;
+  buyerId: number;
+  venueId: number;
+  venueName: string;
+  [k: string]: any;
+};
+
+export async function getStaffOrders(): Promise<StaffOrderRow[]> {
+  return apiGet("/store-items/staff/orders");
+}
+
+// NOTE: We are not guessing allowed statuses.
+// Backend already proved accepts { status: "completed" }.
+// This function sends any string you pass; enforcement is server-side.
+export async function staffMarkOrder(
+  orderId: number,
+  status: string
+): Promise<any> {
+  const id = Number(orderId);
+  if (!id) throw new Error("staffMarkOrder: invalid orderId");
+
+  const s = String(status || "").trim();
+  if (!s) throw new Error("staffMarkOrder: status required");
+
+  return apiPost(`/store-items/staff/orders/${id}/mark`, { status: s });
 }
 
 // ==================================================
