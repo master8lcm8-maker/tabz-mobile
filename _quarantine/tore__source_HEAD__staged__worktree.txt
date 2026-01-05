@@ -1,0 +1,29 @@
+warning: in the working copy of 'app.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'app/_layout.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'package-lock.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'package.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'tsconfig.json', LF will be replaced by CRLF the next time Git touches it
+M	app.json
+M	app/(tabs)/buyer-orders.tsx
+M	app/(tabs)/owner-bank-info.tsx
+M	app/(tabs)/owner-basic-info.tsx
+M	app/(tabs)/owner-cashouts.tsx
+M	app/(tabs)/owner-dashboard.tsx
+M	app/(tabs)/owner-orders.tsx
+M	app/(tabs)/owner-payout-math.tsx
+M	app/(tabs)/owner-wallet.tsx
+M	app/_layout.tsx
+M	app/drinks/index.tsx
+M	app/freeboard/index.tsx
+M	app/login/index.tsx
+D	app/profile.tsx
+M	app/spotlight/index.tsx
+M	app/staff/index.tsx
+M	app/wallet/cashouts.tsx
+M	app/wallet/index.tsx
+M	components/CashoutsScreen.tsx
+M	components/OwnerWalletScreen.tsx
+M	components/lib/socket.ts
+M	package-lock.json
+M	package.json
+M	tsconfig.json

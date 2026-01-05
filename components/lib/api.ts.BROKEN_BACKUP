@@ -1,0 +1,318 @@
+// components/lib/api.ts
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { Platform } from "react-native";
+
+// Default backend base URL (can be overridden via setBaseUrl)
+export let BASE_URL =
+  Platform.OS === "web" ? "http://localhost:3000" : "http://10.0.0.239:3000";
+
+// 🔐 Fallback token (DEV ONLY). WEB MUST NEVER use this.
+const OWNER_FALLBACK_TOKEN =
+  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOjMsImVtYWlsIjoib3duZXIzQHRhYnouYXBwIiwicm9sZSI6ImJ1eWVyIiwiaWF0IjoxNzY1NTkzNDg4LCJleHAiOjE3NjYxOTgyODh9.5dP5v6k_mmyCVRzIhLyFE00lV6kaV8SWFpLhtGMJJs4";
+
+const AUTH_TOKEN_KEY = "TABZ_AUTH_TOKEN";
+
+let accessToken: string | null = null;
+
+// DEV user resolver (locked behavior)
+let devUserId: string = "3";
+export function setDevUserId(userId: string) {
+  devUserId = String(userId || "3");
+}
+
+// ---------------------------
+// BASE URL HELPERS
+// ---------------------------
+export function setBaseUrl(url: string) {
+  const u = String(url || "").trim();
+  if (u) BASE_URL = u;
+}
+export function getBaseUrl() {
+  return BASE_URL;
+}
+
+// ---------------------------
+// TOKEN PERSISTENCE
+// ---------------------------
+async function storageSet(key: string, val: string) {
+  if (Platform.OS === "web") {
+    try {
+      localStorage.setItem(key, val);
+    } catch {}
+    return;
+  }
+  await AsyncStorage.setItem(key, val);
+}
+
+async function storageGet(key: string): Promise<string | null> {
+  if (Platform.OS === "web") {
+    try {
+      return localStorage.getItem(key);
+    } catch {
+      return null;
+    }
+  }
+  return await AsyncStorage.getItem(key);
+}
+
+async function storageRemove(key: string) {
+  if (Platform.OS === "web") {
+    try {
+      localStorage.removeItem(key);
+    } catch {}
+    return;
+  }
+  await AsyncStorage.removeItem(key);
+}
+
+// Call this once on app boot (root layout) so refresh/devtools doesn't lose auth.
+export async function hydrateAuthToken(): Promise<string | null> {
+  const saved = await storageGet(AUTH_TOKEN_KEY);
+  const t = saved ? String(saved).trim() : null;
+  accessToken = t && t.length > 0 ? t : null;
+  return accessToken;
+}
+
+export async function clearAuthToken() {
+  accessToken = null;
+  await storageRemove(AUTH_TOKEN_KEY);
+}
+
+// ---------------------------
+// TOKEN HELPERS
+// ---------------------------
+export async function setAuthToken(token: string | null) {
+  accessToken = token ? String(token).trim() : null;
+
+  if (accessToken) {
+    await storageSet(AUTH_TOKEN_KEY, accessToken);
+  } else {
+    await storageRemove(AUTH_TOKEN_KEY);
+  }
+}
+
+export function getAuthToken(): string | null {
+  return accessToken;
+}
+
+/**
+ * 🔥 CRITICAL RULE (STEP 1):
+ * - WEB: MUST have accessToken (TABZ_AUTH_TOKEN). NEVER fallback.
+ * - NATIVE: can fallback (DEV), if accessToken isn't set.
+ */
+function getEffectiveTokenOrThrow(): string {
+  const t = accessToken ? String(accessToken).trim() : "";
+
+  if (Platform.OS === "web") {
+    if (!t) {
+      throw new Error(
+        "AUTH_MISSING_WEB: No TABZ_AUTH_TOKEN set. On web we NEVER use fallback. " +
+          "Fix: login and store token (setAuthToken), or hydrateAuthToken on app boot."
+      );
+    }
+    return t;
+  }
+
+  // native/dev fallback allowed
+  return t || OWNER_FALLBACK_TOKEN;
+}
+
+// ---------------------------
+// REQUEST WRAPPER
+// ---------------------------
+function buildHeaders(token: string): Record<string, string> {
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    Authorization: `Bearer ${token}`,
+    "Cache-Control": "no-cache",
+    Pragma: "no-cache",
+  };
+
+  // never send x-user-id on WEB (JWT is source of truth)
+  if (Platform.OS !== "web") {
+    headers["x-user-id"] = devUserId;
+  }
+
+  return headers;
+}
+
+async function request(method: "GET" | "POST", path: string, body?: any) {
+  const url = BASE_URL + path;
+
+  // ✅ Enforce Step 1 BEFORE network call
+  const token = getEffectiveTokenOrThrow();
+
+  const init: RequestInit = {
+    method,
+    headers: buildHeaders(token),
+  };
+
+  if (body !== undefined) {
+    (init as any).body = JSON.stringify(body);
+  }
+
+  console.log(`🔗 ${method}`, url, body ?? "");
+
+  const res = await fetch(url, init);
+
+  let data: any = null;
+  try {
+    data = await res.json();
+  } catch {
+    // ignore
+  }
+
+  if (!res.ok) {
+    throw new Error(
+      `${method} ${path} failed: ${res.status} - ${JSON.stringify(data)}`
+    );
+  }
+
+  return data;
+}
+
+export function apiGet(path: string) {
+  return request("GET", path);
+}
+
+export function apiPost(path: string, body: any = {}) {
+  return request("POST", path, body);
+}
+
+// ---------------------------
+// LOGIN
+// ---------------------------
+export async function loginWithPassword(email: string, password: string) {
+  const url = `${BASE_URL}/auth/login`;
+
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email, password }),
+  });
+
+  let data: any = null;
+  try {
+    data = await res.json();
+  } catch {
+    // ignore
+  }
+
+  if (!res.ok) {
+    throw new Error(`Login failed: ${res.status} - ${JSON.stringify(data)}`);
+  }
+
+  const token: string = data?.access_token || data?.accessToken || data?.token;
+  if (!token) throw new Error("No access_token returned by backend");
+
+  await setAuthToken(token);
+  return token;
+}
+
+// ==================================================
+// STEP 3: ROLE GUARD UTILITIES (JWT decode + requireRole)
+// ==================================================
+export type JwtClaims = {
+  sub?: number;
+  userId?: number;
+  role?: string;
+  email?: string;
+  iat?: number;
+  exp?: number;
+  [k: string]: any;
+};
+
+function base64UrlToBase64(input: string) {
+  let s = String(input || "").replace(/-/g, "+").replace(/_/g, "/");
+  while (s.length % 4 !== 0) s += "=";
+  return s;
+}
+
+function safeDecodeBase64ToUtf8(b64: string): string | null {
+  // Web
+  try {
+    if (typeof atob === "function") return atob(b64);
+  } catch {}
+
+  // RN / Node-ish fallback
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const B = (global as any)?.Buffer || require("buffer").Buffer;
+    return B.from(b64, "base64").toString("utf8");
+  } catch {}
+
+  return null;
+}
+
+export function decodeJwtClaims(token?: string | null): JwtClaims | null {
+  const t = String(token || "").trim();
+  if (!t) return null;
+
+  const parts = t.split(".");
+  if (parts.length < 2) return null;
+
+  const payloadB64 = base64UrlToBase64(parts[1]);
+  const payloadJson = safeDecodeBase64ToUtf8(payloadB64);
+  if (!payloadJson) return null;
+
+  try {
+    const obj = JSON.parse(payloadJson);
+    return obj && typeof obj === "object" ? (obj as JwtClaims) : null;
+  } catch {
+    return null;
+  }
+}
+
+export function getActiveClaims(): JwtClaims | null {
+  // Read whatever token the app is currently using (with Step 1 rules applied)
+  const token = getEffectiveTokenOrThrow();
+  return decodeJwtClaims(token);
+}
+
+export function requireRole(required: "owner" | "buyer"): JwtClaims {
+  const claims = getActiveClaims();
+  const role = String(claims?.role || "").toLowerCase();
+
+  if (role !== required) {
+    const sub = claims?.sub ?? claims?.userId;
+    const email = claims?.email;
+    throw new Error(
+      `ROLE_GUARD: required=${required} but tokenRole=${role || "none"} sub=${
+        sub ?? "?"
+      } email=${email ?? "?"}`
+    );
+  }
+
+  return claims!;
+}
+
+// ==================================================
+// STEP 4: BANK INFO GUARD (owner payout prerequisite)
+// ==================================================
+export type BankInfoSummary = {
+  hasBankInfo: boolean;
+  bankName: string | null;
+  last4: string | null;
+  raw?: any;
+};
+
+export async function getBankInfoSummary(): Promise<BankInfoSummary> {
+  const info: any = await apiGet("/wallet/bank-info");
+
+  const isObj = info && typeof info === "object" && !Array.isArray(info);
+  const hasKeys = isObj && Object.keys(info).length > 0;
+
+  if (!hasKeys) {
+    return { hasBankInfo: false, bankName: null, last4: null, raw: info };
+  }
+
+  const bankName = (info.bankNameEnc ?? info.bankName ?? null) as string | null;
+  const last4 = (info.accountLast4 ?? null) as string | null;
+
+  return {
+    hasBankInfo: true,
+    bankName: bankName ? String(bankName) : null,
+    last4: last4 ? String(last4) : null,
+    raw: info,
+  };
+}
