@@ -128,6 +128,21 @@ export default function OwnerCashoutsTab() {
     <View style={styles.root}>
       <Text style={styles.title}>Owner Cashouts</Text>
 
+      {/* Y6: Cashout disclosure (required) */}
+      <View style={styles.disclosure}>
+        <Text style={styles.disclosureTitle}>Before you cash out</Text>
+        <Text style={styles.disclosureText}>
+          • Identity verification may be required before payouts are approved.
+        </Text>
+        <Text style={styles.disclosureText}>
+          • Cashouts are not instant. Processing can take time (often 1–5 business days) depending on review
+          and your bank.
+        </Text>
+        <Text style={styles.disclosureText}>
+          • If details are missing or verification fails, your cashout may be rejected and you will see a reason.
+        </Text>
+      </View>
+
       <View style={styles.card}>
         <Text style={styles.label}>Amount (USD)</Text>
         <TextInput
@@ -178,6 +193,17 @@ const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: "#0b0f19", padding: 16 },
   center: { flex: 1, justifyContent: "center", alignItems: "center" },
   title: { color: "white", fontSize: 22, marginBottom: 12, fontWeight: "700" },
+
+  disclosure: {
+    backgroundColor: "#0f172a",
+    borderWidth: 1,
+    borderColor: "#1f2937",
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 12,
+  },
+  disclosureTitle: { color: "white", fontWeight: "800", marginBottom: 6 },
+  disclosureText: { color: "#cbd5e1", fontSize: 12, lineHeight: 18 },
 
   card: {
     backgroundColor: "#111827",
