@@ -1,24 +1,27 @@
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import React, {
-    useCallback,
-    useEffect,
-    useRef,
-    useState,
-} from 'react';
+// app/drinks/index.tsx
+
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
-    ActivityIndicator,
-    Alert,
-    FlatList,
-    RefreshControl,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Alert,
+  FlatList,
+  RefreshControl,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 
-// TODO: later we will inject this token from real auth flow
+// FIX: web bundler cannot resolve "@/..." because alias isn't configured.
+// Use relative imports from app/drinks -> components (two levels up)
+import { ThemedText } from '../../components/themed-text';
+import { ThemedView } from '../../components/themed-view';
+
+// NOTE: keep BASE_URL hardcoded for now per your file (backend not running yet).
+// For web, localhost is correct. For phone/device, you'd need LAN IP.
 const BASE_URL = 'http://localhost:3000';
+
+// TODO: later we will inject this token from real auth flow
 const HARD_CODED_TOKEN =
   'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOjEsImVtYWlsIjoiZGVtb0B0YWJ6LmFwcCIsImlhdCI6MTc2NDU3NTUxOCwiZXhwIjoxNzY1MTgwMzE4fQ.jSu0o5jnWRqQr_P_gh2H4efZ7krNOqwAW4C0DX2wtj4';
 
@@ -61,9 +64,7 @@ export default function DrinksScreen() {
       const showSpinner = opts?.showSpinner ?? true;
 
       if (!hasToken) {
-        setError(
-          'Missing auth token (temporary hard-coded token is empty).',
-        );
+        setError('Missing auth token (temporary hard-coded token is empty).');
         return;
       }
 
@@ -86,11 +87,7 @@ export default function DrinksScreen() {
 
         if (!res.ok) {
           const text = await res.text();
-          console.error(
-            '[DrinksScreen] Failed to fetch orders:',
-            res.status,
-            text,
-          );
+          console.error('[DrinksScreen] Failed to fetch orders:', res.status, text);
           setError(
             `Failed to load orders (status ${res.status}). Check backend logs.`,
           );
@@ -101,10 +98,7 @@ export default function DrinksScreen() {
         const data = (await res.json()) as DrinkOrder[];
         setOrders(Array.isArray(data) ? data : []);
       } catch (err: any) {
-        console.error(
-          '[DrinksScreen] Network error while loading orders:',
-          err,
-        );
+        console.error('[DrinksScreen] Network error while loading orders:', err);
         setError('Network error while loading orders');
         setOrders([]);
       } finally {
@@ -163,25 +157,18 @@ export default function DrinksScreen() {
     setError(null);
 
     try {
-      const res = await fetch(
-        `${BASE_URL}/store-items/order/${orderId}/status`,
-        {
-          method: 'PATCH',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${HARD_CODED_TOKEN}`,
-          },
-          body: JSON.stringify({ status: newStatus }),
+      const res = await fetch(`${BASE_URL}/store-items/order/${orderId}/status`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${HARD_CODED_TOKEN}`,
         },
-      );
+        body: JSON.stringify({ status: newStatus }),
+      });
 
       if (!res.ok) {
         const text = await res.text();
-        console.error(
-          '[DrinksScreen] Failed to update status:',
-          res.status,
-          text,
-        );
+        console.error('[DrinksScreen] Failed to update status:', res.status, text);
         setError(
           `Failed to update status (status ${res.status}). See backend logs.`,
         );
@@ -191,10 +178,7 @@ export default function DrinksScreen() {
       // Refetch list after update (no spinner)
       await fetchOrders({ showSpinner: false });
     } catch (err: any) {
-      console.error(
-        '[DrinksScreen] Network error while updating status:',
-        err,
-      );
+      console.error('[DrinksScreen] Network error while updating status:', err);
       setError('Network error while updating order status');
     } finally {
       setUpdatingId(null);
@@ -213,9 +197,7 @@ export default function DrinksScreen() {
         <ThemedText>
           Qty: {item.quantity} • Status: {item.status}
         </ThemedText>
-        <ThemedText>
-          Price: {formatPrice(priceCents)} per unit
-        </ThemedText>
+        <ThemedText>Price: {formatPrice(priceCents)} per unit</ThemedText>
         <ThemedText>Venue ID: {item.venueId ?? 'N/A'}</ThemedText>
         <ThemedText style={styles.metaText}>
           Order ID: {item.id} • User: {item.userId}

@@ -1,9 +1,11 @@
+import React from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
 
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
+// FIX: remove "@/..." alias (not configured) -> use relative path from app/freeboard/index.tsx
+import { ThemedText } from '../../components/themed-text';
+import { ThemedView } from '../../components/themed-view';
 
 export default function FreeBoardScreen() {
   return (
@@ -27,7 +29,6 @@ export default function FreeBoardScreen() {
       </View>
 
       <ScrollView contentContainerStyle={styles.scrollContent}>
-
         {/* Quick actions */}
         <View style={styles.section}>
           <ThemedText type="subtitle" style={styles.sectionTitle}>
@@ -63,7 +64,14 @@ export default function FreeBoardScreen() {
   );
 }
 
-function QuickActionCard({ icon, label, description, onPress }) {
+type QuickActionCardProps = {
+  icon: React.ComponentProps<typeof Ionicons>['name'];
+  label: string;
+  description: string;
+  onPress: () => void;
+};
+
+function QuickActionCard({ icon, label, description, onPress }: QuickActionCardProps) {
   return (
     <TouchableOpacity style={styles.quickCard} activeOpacity={0.8} onPress={onPress}>
       <Ionicons name={icon} size={22} style={{ marginBottom: 6 }} />
