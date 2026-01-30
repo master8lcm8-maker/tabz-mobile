@@ -1,7 +1,7 @@
 // app/login/index.tsx
 import { router } from "expo-router";
 import { useState } from "react";
-import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { Pressable, StyleSheet, Text, TextInput, View, Platform } from "react-native";
 import { decodeJwtClaims, loginWithPassword, setBaseUrl } from "../../components/lib/api";
 
 export default function LoginScreen() {
@@ -15,9 +15,8 @@ export default function LoginScreen() {
     setLoading(true);
 
     try {
-      // Ensure correct backend before login
-      setBaseUrl("http://10.0.0.239:3000");
-
+      // Ensure correct backend before login      // WEB must use DigitalOcean; native can use LAN dev backend
+      if (Platform.OS !== "web") setBaseUrl("http://10.0.0.239:3000");
       const token = await loginWithPassword(email.trim(), password);
       const role = String(decodeJwtClaims(token)?.role || "").toLowerCase();
 

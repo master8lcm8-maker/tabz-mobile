@@ -6,8 +6,8 @@
 
 import React from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
-import { ThemedView } from '@/components/themed-view';
-import { ThemedText } from '@/components/themed-text';
+import { ThemedView } from '../../components/themed-view';
+import { ThemedText } from '../../components/themed-text';
 
 export default function OwnerOrdersScreen() {
   return (

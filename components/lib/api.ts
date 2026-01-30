@@ -7,19 +7,65 @@ const BASEURL_KEY = "TABZ_API_BASE_URL";
 const AUTH_TOKEN_KEY = "TABZ_AUTH_TOKEN";
 
 // Default backend base URL (can be overridden via setBaseUrl)
-// ✅ WEB must NOT default to localhost (single source of truth)
-export let BASE_URL = "http://10.0.0.239:3000";
+export let BASE_URL =
+  Platform.OS === "web"
+    ? "https://tabz-backend-bxxbf.ondigitalocean.app"
+    : "http://10.0.0.239:3000";
 
-// 🔐 Fallback token (DEV ONLY). WEB MUST NEVER use fallback.
+// Fallback token (DEV ONLY). WEB MUST NEVER use fallback.
 const DEV_FALLBACK_TOKEN =
   "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOjMsImVtYWlsIjoib3duZXIzQHRhYnouYXBwIiwicm9sZSI6ImJ1eWVyIiwiaWF0IjoxNzY1NTkzNDg4LCJleHAiOjE3NjYxOTgyODh9.5dP5v6k_mmyCVRzIhLyFE00lV6kaV8SWFpLhtGMJJs4";
 
 let accessToken: string | null = null;
 
+// --------------------------------------------------
+// HYDRATION GATE (prevents API calls before init)
+// - request() and loginWithPassword() will await this.
+// - If hydrateSession() is never called, we fail open
+//   after a short timeout so native/dev doesn't hang.
+// --------------------------------------------------
+let hydrationReleased = false;
+let hydrationResolve: (() => void) | null = null;
+
+const hydrationPromise: Promise<void> = new Promise<void>((resolve) => {
+  hydrationResolve = () => {
+    hydrationReleased = true;
+    resolve();
+  };
+});
+
+// Fail-open safety: avoid indefinite hang if hydrateSession is not called.
+const HYDRATION_FAILOPEN_MS = 1500;
+const hydrationFailOpenTimer =
+  typeof setTimeout === "function"
+    ? setTimeout(() => {
+        if (!hydrationReleased && hydrationResolve) {
+          hydrationResolve();
+          hydrationResolve = null;
+        }
+      }, HYDRATION_FAILOPEN_MS)
+    : null;
+
+async function awaitHydration(): Promise<void> {
+  await hydrationPromise;
+}
+
 // DEV user resolver (locked behavior)
 let devUserId: string = "3";
 export function setDevUserId(userId: string) {
   devUserId = String(userId || "3");
+}
+
+// ---------------------------
+// ENV BASE URL (WEB)
+// ---------------------------
+export function getEnvBaseUrl(): string {
+  try {
+    const v = (process as any)?.env?.EXPO_PUBLIC_BASE_URL;
+    return typeof v === "string" ? v.trim() : "";
+  } catch {
+    return "";
+  }
 }
 
 // ---------------------------
@@ -89,6 +135,25 @@ export async function hydrateAuthToken(): Promise<string | null> {
   return accessToken;
 }
 
+// One-call boot hydration (layout uses this)
+export async function hydrateSession(): Promise<void> {
+  try {
+    await hydrateBaseUrl();
+    await hydrateAuthToken();
+  } finally {
+    // Release the hydration gate exactly once
+    if (!hydrationReleased && hydrationResolve) {
+      hydrationResolve();
+      hydrationResolve = null;
+    }
+    if (hydrationFailOpenTimer) {
+      try {
+        clearTimeout(hydrationFailOpenTimer as any);
+      } catch {}
+    }
+  }
+}
+
 export async function clearAuthToken() {
   accessToken = null;
   await storageRemove(AUTH_TOKEN_KEY);
@@ -109,7 +174,7 @@ export function getAuthToken(): string | null {
 }
 
 /**
- * 🔥 CRITICAL RULE:
+ * CRITICAL RULE:
  * - WEB: MUST have accessToken (TABZ_AUTH_TOKEN). NEVER fallback.
  * - NATIVE: can fallback (DEV), if accessToken isn't set.
  */
@@ -167,6 +232,9 @@ function unwrapResponse<T = any>(data: any): T {
 }
 
 async function request(method: "GET" | "POST", path: string, body?: any) {
+  // 🔒 Ensure BASE_URL + token hydration happened before we fire requests
+  await awaitHydration();
+
   const url = BASE_URL + path;
   const token = getEffectiveTokenOrThrow();
 
@@ -215,6 +283,9 @@ export async function apiUploadMultipart(
   file: File | Blob | NativeFile,
   fieldName: string = "file"
 ) {
+  // 🔒 Ensure BASE_URL + token hydration happened before we fire requests
+  await awaitHydration();
+
   const url = BASE_URL + path;
   const token = getEffectiveTokenOrThrow();
 
@@ -223,7 +294,6 @@ export async function apiUploadMultipart(
   if (Platform.OS === "web") {
     // Browser: File/Blob
     const f = file as any;
-    // If it's a Blob without a name, give it one
     const name =
       typeof f?.name === "string" && f.name.trim().length > 0
         ? f.name
@@ -277,6 +347,10 @@ export async function loginWithPassword(
   email: string,
   password: string
 ): Promise<string> {
+  // 🔒 Ensure BASE_URL hydration occurred before login attempts.
+  // Otherwise login can race and hit stale BASE_URL (10.0.0.239) on web.
+  await awaitHydration();
+
   const endpoints = [
     "/auth/login-owner",
     "/auth/login-buyer",
@@ -411,9 +485,6 @@ export async function getStaffOrders(): Promise<StaffOrderRow[]> {
   return apiGet("/store-items/staff/orders");
 }
 
-// NOTE: We are not guessing allowed statuses.
-// Backend already proved accepts { status: "completed" }.
-// This function sends any string you pass; enforcement is server-side.
 export async function staffMarkOrder(
   orderId: number,
   status: string
