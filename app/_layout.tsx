@@ -1,6 +1,7 @@
 // D:\TABZ\tabz-mobile\app\_layout.tsx
 import React, { useEffect, useState } from "react";
 import { Stack, Redirect, useSegments } from "expo-router";
+import { Platform } from "react-native";
 import {
   getAuthToken,
   setBaseUrl,
@@ -9,7 +10,11 @@ import {
   getEnvBaseUrl,
 } from "../components/lib/api";
 
-const DEFAULT_BASE_URL = "http://10.0.0.239:3000";
+const DEFAULT_BASE_URL =
+  Platform.OS === "web"
+    ? "https://tabz-backend-bxxbf.ondigitalocean.app"
+    : "http://10.0.0.239:3000";
+
 
 export default function RootLayout() {
   const [ready, setReady] = useState(false);
