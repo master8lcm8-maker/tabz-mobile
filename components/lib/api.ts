@@ -1,4 +1,4 @@
-﻿// components/lib/api.ts
+// components/lib/api.ts
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Platform } from "react-native";
 
@@ -7,8 +7,7 @@ const BASEURL_KEY = "TABZ_API_BASE_URL";
 const AUTH_TOKEN_KEY = "TABZ_AUTH_TOKEN";
 
 // Default backend base URL (can be overridden via setBaseUrl / hydrateBaseUrl / env)
-const DEFAULT_BASE_URL =
-  process.env.EXPO_PUBLIC_TABZ_API_BASE_URL || "";
+const DEFAULT_BASE_URL = process.env.EXPO_PUBLIC_TABZ_API_BASE_URL || "";
 
 // Base URL used by all requests (hydrated from storage/env on boot)
 export let BASE_URL = DEFAULT_BASE_URL;
@@ -49,7 +48,8 @@ const hydrationPromise: Promise<void> = new Promise<void>((resolve) => {
 // Fail-open safety: avoid indefinite hang if hydrateSession is not called.
 // IMPORTANT: On WEB we must NEVER fail-open. Web must hydrate from localStorage
 // before any authed request, otherwise we send empty Bearer and get 401.
-const HYDRATION_FAILOPEN_MS = Platform.OS === "web" ? 0 : 1500;
+// 🔒 FIX: NEVER fail-open on any platform (prevents empty Bearer)
+const HYDRATION_FAILOPEN_MS = 0;
 
 const hydrationFailOpenTimer =
   HYDRATION_FAILOPEN_MS > 0 && typeof setTimeout === "function"
@@ -232,12 +232,17 @@ function getEffectiveTokenOrThrow(): string {
 // ---------------------------
 // REQUEST WRAPPER
 // ---------------------------
+// 🔒 FIX: never emit Authorization when token is empty/whitespace
 function buildAuthHeaders(token: string): Record<string, string> {
   const headers: Record<string, string> = {
-    Authorization: `Bearer ${token}`,
     "Cache-Control": "no-cache",
     Pragma: "no-cache",
   };
+
+  const t = String(token || "").trim();
+  if (t) {
+    headers.Authorization = `Bearer ${t}`;
+  }
 
   // native dev behavior: support x-user-id for your backend dev routing
   if (Platform.OS !== "web") {
@@ -255,19 +260,14 @@ function buildJsonHeaders(token: string): Record<string, string> {
 }
 
 function unwrapResponse<T = any>(data: any): T {
-  if (
-    data &&
-    typeof data === "object" &&
-    !Array.isArray(data) &&
-    "value" in data
-  ) {
+  if (data && typeof data === "object" && !Array.isArray(data) && "value" in data) {
     return (data as any).value as T;
   }
   return data as T;
 }
 
 async function request(method: "GET" | "POST", path: string, body?: any) {
-  // ðŸ”’ Ensure BASE_URL + token hydration happened before we fire requests
+  // 🔒 Ensure BASE_URL + token hydration happened before we fire requests
   await awaitHydration();
 
   const url = BASE_URL + path;
@@ -290,9 +290,7 @@ async function request(method: "GET" | "POST", path: string, body?: any) {
   } catch {}
 
   if (!res.ok) {
-    throw new Error(
-      `${method} ${path} failed: ${res.status} - ${JSON.stringify(data)}`
-    );
+    throw new Error(`${method} ${path} failed: ${res.status} - ${JSON.stringify(data)}`);
   }
 
   return unwrapResponse(data);
@@ -318,7 +316,7 @@ export async function apiUploadMultipart(
   file: File | Blob | NativeFile,
   fieldName: string = "file"
 ) {
-  // ðŸ”’ Ensure BASE_URL + token hydration happened before we fire requests
+  // 🔒 Ensure BASE_URL + token hydration happened before we fire requests
   await awaitHydration();
 
   const url = BASE_URL + path;
@@ -330,9 +328,7 @@ export async function apiUploadMultipart(
     // Browser: File/Blob
     const f = file as any;
     const name =
-      typeof f?.name === "string" && f.name.trim().length > 0
-        ? f.name
-        : "upload.png";
+      typeof f?.name === "string" && f.name.trim().length > 0 ? f.name : "upload.png";
     fd.append(fieldName, f, name);
   } else {
     // React Native / Expo: { uri, name, type }
@@ -359,9 +355,7 @@ export async function apiUploadMultipart(
   } catch {}
 
   if (!res.ok) {
-    throw new Error(
-      `POST ${path} failed: ${res.status} - ${JSON.stringify(data)}`
-    );
+    throw new Error(`POST ${path} failed: ${res.status} - ${JSON.stringify(data)}`);
   }
 
   return unwrapResponse(data);
@@ -378,11 +372,8 @@ export function uploadMyCover(file: File | Blob | NativeFile) {
 // ---------------------------
 // LOGIN (WEB-FIRST)
 // ---------------------------
-export async function loginWithPassword(
-  email: string,
-  password: string
-): Promise<string> {
-  // ðŸ”’ Ensure BASE_URL hydration occurred before login attempts.
+export async function loginWithPassword(email: string, password: string): Promise<string> {
+  // 🔒 Ensure BASE_URL hydration occurred before login attempts.
   await awaitHydration();
 
   const endpoints = [
@@ -519,10 +510,7 @@ export async function getStaffOrders(): Promise<StaffOrderRow[]> {
   return apiGet("/store-items/staff/orders");
 }
 
-export async function staffMarkOrder(
-  orderId: number,
-  status: string
-): Promise<any> {
+export async function staffMarkOrder(orderId: number, status: string): Promise<any> {
   const id = Number(orderId);
   if (!id) throw new Error("staffMarkOrder: invalid orderId");
 
@@ -556,5 +544,3 @@ export async function getBankInfoSummary(): Promise<BankInfoSummary> {
     raw: info,
   };
 }
-
-
