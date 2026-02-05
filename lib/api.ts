@@ -4,4 +4,3 @@
  * Canonical implementation lives in components/lib/api.ts.
  */
 export * from "../components/lib/api";
-export { default } from "../components/lib/api";

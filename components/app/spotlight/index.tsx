@@ -1,4 +1,4 @@
-import { Ionicons } from '@expo/vector-icons';
+﻿import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
 
@@ -62,7 +62,14 @@ export default function SpotlightScreen() {
   );
 }
 
-function QuickActionCard({ icon, label, description, onPress }) {
+type QuickActionCardProps = {
+  icon: React.ComponentProps<typeof Ionicons>["name"];
+  label: string;
+  description?: string;
+  onPress: () => void;
+};
+
+function QuickActionCard({ icon, label, description, onPress }: QuickActionCardProps) {
   return (
     <TouchableOpacity style={styles.quickCard} activeOpacity={0.8} onPress={onPress}>
       <Ionicons name={icon} size={22} style={{ marginBottom: 6 }} />
@@ -132,3 +139,5 @@ const styles = StyleSheet.create({
     opacity: 0.8,
   },
 });
+
+

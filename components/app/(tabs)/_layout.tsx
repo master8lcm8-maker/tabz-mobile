@@ -1,17 +1,15 @@
-// app/(tabs)/_layout.tsx
+﻿// app/(tabs)/_layout.tsx
 import React, { useEffect } from "react";
 import { Tabs, Redirect } from "expo-router";
-import { getAuthToken, setBaseUrl } from "../../components/lib/api";
-
-const DEFAULT_BASE_URL = "http://10.0.0.239:3000";
+import { getAuthToken, setBaseUrl } from "../../lib/api";
 
 export default function TabsLayout() {
   // Always lock the base URL once
   useEffect(() => {
-    setBaseUrl(DEFAULT_BASE_URL);
+    // base URL controlled by env/storage; do not hardcode
   }, []);
 
-  // ✅ IMPORTANT:
+  // âœ… IMPORTANT:
   // Never do router.replace() here (it can fire before RootLayout mounts).
   // Use Redirect instead.
   const tok = getAuthToken();
@@ -34,3 +32,4 @@ export default function TabsLayout() {
     </Tabs>
   );
 }
+
