@@ -1,6 +1,6 @@
 // app/(tabs)/profile.tsx
-// MINIMAL ADD: web upload handlers that POST multipart field name "file"
-// and then refresh /profiles/me so UI updates.
+// Robust: use avatarValid/coverValid to decide fallback vs remote,
+// cache-bust on load/upload, and force remount when validity flips.
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
@@ -46,7 +46,7 @@ function getInitials(name: string | null | undefined) {
 }
 
 function isTinyImage(w?: number, h?: number) {
-  // ✅ MINIMAL FIX: only treat explicit 1x1 as invalid.
+  // ✅ Treat ONLY explicit 1x1 as invalid.
   // On web, width/height can be undefined even for valid images.
   return w === 1 && h === 1;
 }
@@ -58,10 +58,11 @@ export default function MyProfileScreen() {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
+  // Validity gates (used to decide fallback vs remote)
   const [avatarValid, setAvatarValid] = useState(false);
   const [coverValid, setCoverValid] = useState(false);
 
-  // ✅ MINIMAL ADD: used to bust cache ONLY when profile changes / upload happens
+  // Cache-bust nonce: bump only on load/upload (not every render)
   const [imgNonce, setImgNonce] = useState(0);
 
   const initials = useMemo(
@@ -72,20 +73,20 @@ export default function MyProfileScreen() {
   const loadProfile = useCallback(async () => {
     await hydrateAuthToken();
     const res: any = await apiGet("/profiles/me");
-    const p = res?.profile ?? null;
+    const p = (res?.profile ?? null) as Profile | null;
 
     setProfile(p);
     setErrorMsg(null);
 
-    // ✅ MINIMAL FIX: if URLs exist, start as valid and let onLoad/onError correct it.
+    // Start optimistic when URLs exist; onLoad/onError will correct it.
     setAvatarValid(!!p?.avatarUrl);
     setCoverValid(!!p?.coverUrl);
 
-    // ✅ bust cache once when we load a new profile
+    // Bust cache once when profile loads/refreshes
     setImgNonce((n) => n + 1);
   }, []);
 
-  // ✅ MINIMAL ADD: web upload
+  // WEB upload (avatar/cover)
   const pickAndUpload = useCallback(
     async (kind: "avatar" | "cover") => {
       if (Platform.OS !== "web") {
@@ -142,10 +143,10 @@ export default function MyProfileScreen() {
           );
         }
 
-        // ✅ refresh profile so new avatarUrl/coverUrl is pulled
+        // Refresh profile so new URLs are pulled
         await loadProfile();
 
-        // ✅ MINIMAL: extra bump to guarantee <Image> remounts after upload
+        // Extra bump guarantees remount even if URL string repeats
         setImgNonce((n) => n + 1);
       } catch (e: any) {
         const msg = String(e?.message || e || "Upload failed");
@@ -234,15 +235,19 @@ export default function MyProfileScreen() {
     profile.avatarUrl ? "yes" : "no"
   } • coverUrl: ${profile.coverUrl ? "yes" : "no"} • platform: ${Platform.OS}`;
 
-  // ✅ MINIMAL ADD: cache-bust ONLY when imgNonce changes (after load/upload)
+  // Cache-bust only when imgNonce changes
   const avatarUri =
     profile.avatarUrl && avatarValid
-      ? `${profile.avatarUrl}${profile.avatarUrl.includes("?") ? "&" : "?"}v=${imgNonce}`
+      ? `${profile.avatarUrl}${
+          profile.avatarUrl.includes("?") ? "&" : "?"
+        }v=${imgNonce}`
       : null;
 
   const coverUri =
     profile.coverUrl && coverValid
-      ? `${profile.coverUrl}${profile.coverUrl.includes("?") ? "&" : "?"}v=${imgNonce}`
+      ? `${profile.coverUrl}${
+          profile.coverUrl.includes("?") ? "&" : "?"
+        }v=${imgNonce}`
       : null;
 
   const coverSource = coverUri ? { uri: coverUri } : FALLBACK_COVER;
@@ -253,7 +258,7 @@ export default function MyProfileScreen() {
       {/* Cover */}
       <View style={styles.coverWrap}>
         <Image
-          key={coverUri || "fallback-cover"}
+          key={`${coverUri || "fallback-cover"}|${coverValid}|${imgNonce}`}
           source={coverSource}
           style={styles.cover}
           resizeMode="cover"
@@ -261,7 +266,7 @@ export default function MyProfileScreen() {
             if (!profile.coverUrl) return;
             const w = e?.nativeEvent?.source?.width;
             const h = e?.nativeEvent?.source?.height;
-            // ✅ if width/height missing, DO NOT mark invalid
+            // If width/height missing, treat as valid (not tiny)
             setCoverValid(!isTinyImage(w, h));
           }}
           onError={() => setCoverValid(false)}
@@ -272,7 +277,7 @@ export default function MyProfileScreen() {
       <View style={styles.avatarWrap}>
         <View style={styles.avatarOuter}>
           <Image
-            key={avatarUri || "fallback-avatar"}
+            key={`${avatarUri || "fallback-avatar"}|${avatarValid}|${imgNonce}`}
             source={avatarSource}
             style={styles.avatar}
             resizeMode="cover"
@@ -296,7 +301,7 @@ export default function MyProfileScreen() {
         <Text style={styles.name}>{profile.displayName || "Unnamed User"}</Text>
         <Text style={styles.debug}>{debugLine}</Text>
 
-        {/* buttons + error line */}
+        {/* web-only upload buttons */}
         {Platform.OS === "web" ? (
           <View style={{ flexDirection: "row", gap: 10, marginTop: 10 }}>
             <TouchableOpacity
@@ -332,7 +337,12 @@ export default function MyProfileScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#fff" },
-  center: { flex: 1, alignItems: "center", justifyContent: "center", padding: 16 },
+  center: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 16,
+  },
 
   coverWrap: { width: "100%", height: 180, backgroundColor: "#e5e5e5" },
   cover: { width: "100%", height: 180, backgroundColor: "#e5e5e5" },
@@ -363,10 +373,20 @@ const styles = StyleSheet.create({
   debug: { marginTop: 6, fontSize: 12, color: "#6b7280" },
 
   bio: { marginTop: 10, fontSize: 14, color: "#333" },
-  bioMuted: { marginTop: 10, fontSize: 14, color: "#999", fontStyle: "italic" },
+  bioMuted: {
+    marginTop: 10,
+    fontSize: 14,
+    color: "#999",
+    fontStyle: "italic",
+  },
 
   mutedTitle: { fontSize: 16, fontWeight: "700", marginBottom: 6 },
-  mutedText: { fontSize: 12, color: "#666", marginBottom: 12, textAlign: "center" },
+  mutedText: {
+    fontSize: 12,
+    color: "#666",
+    marginBottom: 12,
+    textAlign: "center",
+  },
 
   btnSmall: {
     borderRadius: 10,

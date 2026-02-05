@@ -1,26 +1,35 @@
-// D:\TABZ\tabz-mobile\lib\tabz-api.ts
-// Phase 2.1: Single source of truth for TABZ API baseUrl + auth token (persistent)
+﻿/* lib/tabz-api.ts
+   Single source of truth for TABZ API baseUrl + auth token (persistent)
+   Default base URL is env-driven; no LAN/localhost hardcoding.
+*/
 
-export const DEFAULT_BASE_URL = 'http://10.0.0.239:3000';
+const ENV_BASE_URL =
+  (process.env.EXPO_PUBLIC_TABZ_API_BASE_URL ||
+    process.env.EXPO_PUBLIC_API_BASE_URL ||
+    "").trim();
+
+// Safe fallback for web builds if env is missing.
+// (Change this to your canonical production URL if different.)
+export const DEFAULT_BASE_URL = ENV_BASE_URL || process.env.EXPO_PUBLIC_TABZ_API_BASE_URL || "http://127.0.0.1:3000";
 
 let AUTH_TOKEN: string | null = null;
 let API_BASE_URL: string = DEFAULT_BASE_URL;
 
-const TOKEN_KEY = 'TABZ_AUTH_TOKEN';
-const BASEURL_KEY = 'TABZ_API_BASE_URL';
+const TOKEN_KEY = "TABZ_AUTH_TOKEN";
+const BASEURL_KEY = "TABZ_API_BASE_URL";
 
 // --- Storage (tries SecureStore, then AsyncStorage, then in-memory) ---
 async function storageGet(key: string): Promise<string | null> {
   // 1) expo-secure-store
   try {
-    const SecureStore = await import('expo-secure-store');
+    const SecureStore = await import("expo-secure-store");
     const v = await SecureStore.getItemAsync(key);
     return v ?? null;
   } catch {}
 
   // 2) AsyncStorage
   try {
-    const AsyncStorage = await import('@react-native-async-storage/async-storage');
+    const AsyncStorage = await import("@react-native-async-storage/async-storage");
     const v = await AsyncStorage.default.getItem(key);
     return v ?? null;
   } catch {}
@@ -30,13 +39,13 @@ async function storageGet(key: string): Promise<string | null> {
 
 async function storageSet(key: string, value: string): Promise<void> {
   try {
-    const SecureStore = await import('expo-secure-store');
+    const SecureStore = await import("expo-secure-store");
     await SecureStore.setItemAsync(key, value);
     return;
   } catch {}
 
   try {
-    const AsyncStorage = await import('@react-native-async-storage/async-storage');
+    const AsyncStorage = await import("@react-native-async-storage/async-storage");
     await AsyncStorage.default.setItem(key, value);
     return;
   } catch {}
@@ -44,13 +53,13 @@ async function storageSet(key: string, value: string): Promise<void> {
 
 async function storageDel(key: string): Promise<void> {
   try {
-    const SecureStore = await import('expo-secure-store');
+    const SecureStore = await import("expo-secure-store");
     await SecureStore.deleteItemAsync(key);
     return;
   } catch {}
 
   try {
-    const AsyncStorage = await import('@react-native-async-storage/async-storage');
+    const AsyncStorage = await import("@react-native-async-storage/async-storage");
     await AsyncStorage.default.removeItem(key);
     return;
   } catch {}
@@ -58,7 +67,7 @@ async function storageDel(key: string): Promise<void> {
 
 // --- Base URL ---
 export function setBaseUrl(url: string) {
-  const u = (url || '').trim();
+  const u = (url || "").trim();
   if (u) API_BASE_URL = u;
 }
 
@@ -80,7 +89,7 @@ export async function saveBaseUrl(url: string) {
 
 // --- Token ---
 export function setAuthToken(token: string | null) {
-  AUTH_TOKEN = (token || '').trim() || null;
+  AUTH_TOKEN = (token || "").trim() || null;
 }
 
 export function getAuthToken() {
@@ -111,13 +120,14 @@ export async function clearAuthToken() {
 // --- Headers ---
 export function getAuthHeaders() {
   if (!AUTH_TOKEN) {
-    throw new Error('No auth token set. Login required.');
+    throw new Error("No auth token set. Login required.");
   }
 
   return {
     Authorization: `Bearer ${AUTH_TOKEN}`,
-    'Content-Type': 'application/json',
-    'Cache-Control': 'no-cache',
-    Pragma: 'no-cache',
+    "Content-Type": "application/json",
+    "Cache-Control": "no-cache",
+    Pragma: "no-cache",
   };
 }
+

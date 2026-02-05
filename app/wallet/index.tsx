@@ -1,52 +1,91 @@
 // ===============================================
 //  app/wallet/index.tsx
 //  Expo Router route for Owner Wallet Home
-//  URL: /wallet or /wallet?token=JWT
+//  URL: /wallet  (optional ?token=JWT for debugging)
 // ===============================================
 
-import React from 'react';
-import { View, Text } from 'react-native';
-import { useLocalSearchParams } from 'expo-router';
-import OwnerWalletScreen from '../../components/OwnerWalletScreen';
+import React, { useEffect, useMemo, useState } from "react";
+import { View, Text } from "react-native";
+import { useLocalSearchParams } from "expo-router";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import OwnerWalletScreen from "../../components/OwnerWalletScreen";
 
-// 🔐 Fallback Owner3 token – SAME as in app/wallet/cashouts.tsx
-const OWNER_FALLBACK_TOKEN =
-  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOjMsImVtYWlsIjoib3duZXIzQHRhYnouYXBwIiwiaWF0IjoxNzY1MjkwNjY5LCJleHAiOjE3NjU4OTU0Njl9.QcudaWVK6bnbT9vXUZVISVSaP5hCCt1l4tGiBncupWQ';
+const AUTH_TOKEN_KEY = "TABZ_AUTH_TOKEN";
+
+function tokenFromParams(params: any): string {
+  const t = params?.token;
+  if (typeof t === "string") return t.trim();
+  if (Array.isArray(t) && typeof t[0] === "string") return String(t[0]).trim();
+  return "";
+}
 
 export default function WalletHomeRoute() {
-  // Allow override via ?token= in URL, but default to OWNER_FALLBACK_TOKEN
   const params = useLocalSearchParams<{ token?: string | string[] }>();
 
-  const tokenFromUrl =
-    typeof params.token === 'string'
-      ? params.token
-      : Array.isArray(params.token)
-      ? params.token[0]
-      : undefined;
+  const urlToken = useMemo(() => tokenFromParams(params), [params]);
 
-  const token = tokenFromUrl || OWNER_FALLBACK_TOKEN;
+  const [storedToken, setStoredToken] = useState<string>("");
+  const [loading, setLoading] = useState(true);
 
-  if (!token) {
-    // Simple fallback if somehow no token at all
+  useEffect(() => {
+    let cancelled = false;
+
+    async function load() {
+      setLoading(true);
+      try {
+        const t = ((await AsyncStorage.getItem(AUTH_TOKEN_KEY)) || "").trim();
+        if (!cancelled) setStoredToken(t);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Priority: URL token (explicit override for debugging) -> stored auth token
+  const token = urlToken || storedToken;
+
+  if (loading) {
     return (
       <View
         style={{
           flex: 1,
-          backgroundColor: '#000',
-          alignItems: 'center',
-          justifyContent: 'center',
+          backgroundColor: "#000",
+          alignItems: "center",
+          justifyContent: "center",
           padding: 24,
         }}
       >
-        <Text style={{ color: '#fff', fontSize: 16, textAlign: 'center' }}>
-          Missing owner token.{'\n'}
-          Open this screen from the owner login/dashboard so we can include
-          your JWT.
+        <Text style={{ color: "#fff", fontSize: 16, textAlign: "center" }}>
+          Loading…
+        </Text>
+      </View>
+    );
+  }
+
+  if (!token) {
+    return (
+      <View
+        style={{
+          flex: 1,
+          backgroundColor: "#000",
+          alignItems: "center",
+          justifyContent: "center",
+          padding: 24,
+        }}
+      >
+        <Text style={{ color: "#fff", fontSize: 16, textAlign: "center" }}>
+          Missing auth token.{"\n"}
+          Please log in, then return to Wallet.
         </Text>
       </View>
     );
   }
 
   // ✅ Pass the token down to the OwnerWalletScreen
-  return <OwnerWalletScreen token={String(token)} />;
+  return <OwnerWalletScreen token={token} />;
 }

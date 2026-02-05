@@ -1,4 +1,4 @@
-﻿// D:\TABZ\tabz-mobile\app\_layout.tsx
+// D:\TABZ\tabz-mobile\app\_layout.tsx
 import React, { useEffect, useState } from "react";
 import { Stack, Redirect, useSegments } from "expo-router";
 import { Platform } from "react-native";
@@ -10,7 +10,7 @@ import {
   getEnvBaseUrl,
 } from "../components/lib/api";
 
-const DEFAULT_BASE_URL = process.env.EXPO_PUBLIC_TABZ_API_BASE_URL || "http://127.0.0.1:3000";
+const DEFAULT_BASE_URL = "https://tabz-backend-bxxbf.ondigitalocean.app";
 
 export default function RootLayout() {
   const [ready, setReady] = useState(false);
@@ -32,7 +32,7 @@ export default function RootLayout() {
   const inLogin = segments.length > 0 && segments[0] === "login";
   const inStaff = segments.length > 0 && segments[0] === "staff";
 
-  // Donâ€™t redirect until storage hydration is done (prevents web refresh redirect-loop)
+  // Don’t redirect until storage hydration is done (prevents web refresh redirect-loop)
   if (!ready) return null;
 
   // If not authed -> force login
@@ -59,4 +59,3 @@ export default function RootLayout() {
     </Stack>
   );
 }
-

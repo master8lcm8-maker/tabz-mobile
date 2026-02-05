@@ -1,7 +1,8 @@
-// app/(tabs)/owner-payout-math.tsx
+// components/app/(tabs)/owner-payout-math.tsx
 import React, { useEffect, useMemo, useState } from "react";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
-import { useLocalSearchParams } from "expo-router";
+
+import { apiGet, getAuthToken, getBaseUrl, hydrateSession } from "../../lib/api";
 
 type Metrics = {
   completedPayoutCents?: number;
@@ -24,42 +25,11 @@ type Summary = {
   [k: string]: any;
 };
 
-// ✅ SINGLE SOURCE OF TRUTH (from your PowerShell output)
-const OWNER_FRESH_TOKEN =
-  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOjMsImVtYWlsIjoib3duZXIzQHRhYnouYXBwIiwicm9sZSI6ImJ1eWVyIiwiaWF0IjoxNzY1NTkzNDg4LCJleHAiOjE3NjYxOTgyODh9.5dP5v6k_mmyCVRzIhLyFE00lV6kaV8SWFpLhtGMJJs4";
-
-// Your browser is currently calling 10.0.0.239:3000 (per DevTools)
-// Keep default aligned to what you're actually hitting to avoid split-brain.
-const DEFAULT_BASE_URL = "http://10.0.0.239:3000";
-
 function toDollars(cents: number) {
   return (cents / 100).toFixed(2);
 }
 
 export default function OwnerPayoutMathScreen() {
-  const params = useLocalSearchParams();
-
-  const baseUrl = useMemo(() => {
-    const p = params?.baseUrl;
-    return typeof p === "string" && p.startsWith("http") ? p : DEFAULT_BASE_URL;
-  }, [params]);
-
-  const token = useMemo(() => {
-    const incoming = params?.token;
-    if (typeof incoming === "string" && incoming.startsWith("eyJ")) {
-      // If the screen is being fed a stale token via URL, it will show up here.
-      // We force the verified PowerShell token unless it's the exact same value.
-      if (incoming !== OWNER_FRESH_TOKEN) {
-        console.warn(
-          "[owner-payout-math] Incoming token does not match PowerShell token. Forcing PowerShell token."
-        );
-        return OWNER_FRESH_TOKEN;
-      }
-      return incoming;
-    }
-    return OWNER_FRESH_TOKEN;
-  }, [params]);
-
   const [summaryErr, setSummaryErr] = useState<string | null>(null);
   const [metricsErr, setMetricsErr] = useState<string | null>(null);
   const [cashoutsErr, setCashoutsErr] = useState<string | null>(null);
@@ -68,37 +38,14 @@ export default function OwnerPayoutMathScreen() {
   const [metrics, setMetrics] = useState<Metrics | null>(null);
   const [cashouts, setCashouts] = useState<Cashout[] | null>(null);
 
+  async function ensureSessionReady() {
+    await hydrateSession();
+    const token = getAuthToken();
+    if (!token) throw new Error("Not authenticated. Please log in first.");
+  }
+
   useEffect(() => {
     let cancelled = false;
-
-    async function fetchJson(path: string) {
-      const url = `${baseUrl}${path}`;
-      const res = await fetch(url, {
-        method: "GET",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-      });
-
-      const text = await res.text();
-      let data: any = null;
-      try {
-        data = text ? JSON.parse(text) : null;
-      } catch {
-        data = text;
-      }
-
-      if (!res.ok) {
-        const msg =
-          typeof data === "object" && data?.message
-            ? data.message
-            : `HTTP ${res.status}`;
-        throw new Error(msg);
-      }
-
-      return data;
-    }
 
     async function run() {
       setSummaryErr(null);
@@ -106,30 +53,45 @@ export default function OwnerPayoutMathScreen() {
       setCashoutsErr(null);
 
       // Helpful console proof (no UI changes required)
-      console.log("[owner-payout-math] baseUrl =", baseUrl);
-      console.log(
-        "[owner-payout-math] token(first20) =",
-        token.slice(0, 20),
-        "..."
-      );
+      try {
+        console.log("[owner-payout-math] baseUrl =", getBaseUrl());
+      } catch {}
 
       try {
-        const s = await fetchJson("/wallet/summary");
-        if (!cancelled) setSummary(s);
+        await ensureSessionReady();
+      } catch (e: any) {
+        if (!cancelled) {
+          const msg = String(e?.message || e);
+          setSummaryErr(msg);
+          setMetricsErr(msg);
+          setCashoutsErr(msg);
+          setSummary(null);
+          setMetrics(null);
+          setCashouts(null);
+        }
+        return;
+      }
+
+      // summary
+      try {
+        const s = await apiGet("/wallet/summary");
+        if (!cancelled) setSummary((s || null) as any);
       } catch (e: any) {
         if (!cancelled) setSummaryErr(String(e?.message || e));
       }
 
+      // metrics
       try {
-        const m = await fetchJson("/wallet/metrics");
-        if (!cancelled) setMetrics(m);
+        const m = await apiGet("/wallet/metrics");
+        if (!cancelled) setMetrics((m || null) as any);
       } catch (e: any) {
         if (!cancelled) setMetricsErr(String(e?.message || e));
       }
 
+      // cashouts
       try {
-        const c = await fetchJson("/wallet/cashouts");
-        if (!cancelled) setCashouts(Array.isArray(c) ? c : []);
+        const c = await apiGet("/wallet/cashouts");
+        if (!cancelled) setCashouts(Array.isArray(c) ? (c as any) : []);
       } catch (e: any) {
         if (!cancelled) setCashoutsErr(String(e?.message || e));
       }
@@ -140,21 +102,22 @@ export default function OwnerPayoutMathScreen() {
     return () => {
       cancelled = true;
     };
-  }, [baseUrl, token]);
+  }, []);
 
   const completedFromCashoutsCents = useMemo(() => {
     if (!cashouts || !Array.isArray(cashouts)) return 0;
-    // Keep conservative: only count items that look "completed/paid"
+
+    // Conservative: only count items that look "completed/paid"
     const completed = cashouts.filter((x) => {
       const st = String(x?.status || "").toLowerCase();
       return st.includes("paid") || st.includes("complete") || st.includes("completed");
     });
+
     return completed.reduce((sum, x) => sum + (Number(x?.amountCents || 0) || 0), 0);
   }, [cashouts]);
 
   const completedFromMetricsCents = useMemo(() => {
-    const v = Number(metrics?.completedPayoutCents || 0) || 0;
-    return v;
+    return Number(metrics?.completedPayoutCents || 0) || 0;
   }, [metrics]);
 
   const deltaCents = completedFromMetricsCents - completedFromCashoutsCents;
@@ -163,12 +126,12 @@ export default function OwnerPayoutMathScreen() {
     <ScrollView style={styles.root} contentContainerStyle={styles.container}>
       <Text style={styles.title}>Payout Math (Dev)</Text>
       <Text style={styles.subtitle}>
-        Cross-check wallet, cashouts, and metrics for Owner3.
+        Cross-check wallet, cashouts, and metrics for the logged-in owner.
       </Text>
 
       {summaryErr ? (
         <View style={[styles.alert, styles.alertBad]}>
-          <Text style={styles.alertText}>summary HTTP {summaryErr}</Text>
+          <Text style={styles.alertText}>summary: {summaryErr}</Text>
         </View>
       ) : null}
 
@@ -194,24 +157,29 @@ export default function OwnerPayoutMathScreen() {
           </Text>
         </View>
 
-        {metricsErr ? (
-          <Text style={styles.errText}>metrics: {metricsErr}</Text>
-        ) : null}
-        {cashoutsErr ? (
-          <Text style={styles.errText}>cashouts: {cashoutsErr}</Text>
-        ) : null}
+        {metricsErr ? <Text style={styles.errText}>metrics: {metricsErr}</Text> : null}
+        {cashoutsErr ? <Text style={styles.errText}>cashouts: {cashoutsErr}</Text> : null}
       </View>
 
       <View style={styles.card}>
-        <Text style={styles.cardTitle}>NEXT PAYOUT</Text>
-        <Text style={styles.smallMuted}>Simulated amount</Text>
-        <Text style={styles.bigMoney}>$0.00</Text>
-        <Text style={styles.smallMuted}>When</Text>
-        <Text style={styles.muted}>No payout scheduled</Text>
-        <Text style={styles.smallMuted}>Notes</Text>
-        <Text style={styles.muted}>
-          No cashout-ready balance. When cashouts complete, this will simulate the next payout.
+        <Text style={styles.cardTitle}>WALLET SNAPSHOT</Text>
+        <Text style={styles.smallMuted}>Balance</Text>
+        <Text style={styles.bigMoney}>
+          {summary ? `$${toDollars(Number(summary.balanceCents || 0) || 0)}` : "$0.00"}
         </Text>
+
+        <Text style={styles.smallMuted}>Spendable</Text>
+        <Text style={styles.muted}>
+          {summary ? `$${toDollars(Number(summary.spendableBalanceCents || 0) || 0)}` : "$0.00"}
+        </Text>
+
+        <Text style={styles.smallMuted}>Cashout-ready</Text>
+        <Text style={styles.muted}>
+          {summary ? `$${toDollars(Number(summary.cashoutAvailableCents || 0) || 0)}` : "$0.00"}
+        </Text>
+
+        <Text style={styles.smallMuted}>Base URL</Text>
+        <Text style={styles.muted}>{getBaseUrl()}</Text>
       </View>
     </ScrollView>
   );
@@ -230,7 +198,10 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     borderWidth: 1,
   },
-  alertBad: { backgroundColor: "rgba(255,0,0,0.10)", borderColor: "rgba(255,0,0,0.35)" },
+  alertBad: {
+    backgroundColor: "rgba(255,0,0,0.10)",
+    borderColor: "rgba(255,0,0,0.35)",
+  },
   alertText: { color: "#FF6B6B", fontWeight: "600" },
 
   card: {
