@@ -1,4 +1,4 @@
-﻿// app/(tabs)/owner-wallet.tsx
+// app/(tabs)/owner-wallet.tsx
 import React, { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
@@ -28,7 +28,7 @@ type Cashout = {
 };
 
 // ---- Base URL + Token sourcing (NO DEV HARDCODES) ----
-const PROD_BASE_URL = process.env.EXPO_PUBLIC_TABZ_API_BASE_URL || "http://127.0.0.1:3000";
+const PROD_BASE_URL = "https://tabz-backend-bxxbf.ondigitalocean.app";
 const ENV_BASE_URL = (process.env.EXPO_PUBLIC_BASE_URL || "").trim();
 const AUTH_TOKEN_KEY = "TABZ_AUTH_TOKEN";
 
@@ -94,7 +94,7 @@ export default function OwnerWalletTab() {
       // Load token from standard storage (set by login)
       const token = ((await AsyncStorage.getItem(AUTH_TOKEN_KEY)) || "").trim();
 
-      // Console proof (so we can confirm itâ€™s using the correct values)
+      // Console proof (so we can confirm it’s using the correct values)
       console.log("[owner-wallet] baseUrl =", baseUrl);
       console.log(
         "[owner-wallet] token(first20) =",
@@ -251,4 +251,3 @@ const styles = StyleSheet.create({
 
   muted: { color: "#B9C2CF" },
 });
-

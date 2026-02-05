@@ -1,4 +1,4 @@
-import { Ionicons } from '@expo/vector-icons';
+﻿import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
 
@@ -62,7 +62,13 @@ export default function StaffScreen() {
   );
 }
 
-function ActionCard({ icon, label, description }) {
+type ActionCardProps = {
+  icon: React.ComponentProps<typeof Ionicons>["name"];
+  label: string;
+  description?: string;
+};
+
+function ActionCard({ icon, label, description }: ActionCardProps) {
   return (
     <TouchableOpacity style={styles.actionCard} activeOpacity={0.8}>
       <Ionicons name={icon} size={26} style={styles.actionIcon} />
@@ -135,3 +141,5 @@ const styles = StyleSheet.create({
     opacity: 0.8,
   },
 });
+
+

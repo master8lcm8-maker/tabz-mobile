@@ -1,8 +1,8 @@
-// app/login/index.tsx
+﻿// app/login/index.tsx
 import { router } from "expo-router";
 import { useState } from "react";
 import { Pressable, StyleSheet, Text, TextInput, View, Platform } from "react-native";
-import { loginWithPassword, setBaseUrl } from "../../components/lib/api";
+import { loginWithPassword, setBaseUrl } from "../../lib/api";
 
 export default function LoginScreen() {
   const [email, setEmail] = useState("buyer@tabz.app");
@@ -16,7 +16,7 @@ export default function LoginScreen() {
 
     try {
       // Ensure correct backend before login      // WEB must use DigitalOcean; native can use LAN dev backend
-      if (Platform.OS !== "web") setBaseUrl("http://10.0.0.239:3000");
+      // base URL is controlled by env/storage; do not hardcode
       await loginWithPassword(email.trim(), password);
 
       // Go to TABZ (tabs group)
@@ -58,7 +58,7 @@ export default function LoginScreen() {
       {error ? <Text style={styles.error}>{error}</Text> : null}
 
       <Pressable onPress={handleLogin} disabled={loading} style={styles.button}>
-        <Text style={styles.buttonText}>{loading ? "Logging in…" : "Log in"}</Text>
+        <Text style={styles.buttonText}>{loading ? "Logging inâ€¦" : "Log in"}</Text>
       </Pressable>
     </View>
   );
@@ -88,3 +88,4 @@ const styles = StyleSheet.create({
   },
   buttonText: { color: "#000", fontWeight: "700" },
 });
+

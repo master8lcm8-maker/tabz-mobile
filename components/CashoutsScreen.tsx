@@ -1,4 +1,4 @@
-// components/CashoutsScreen.tsx
+﻿// components/CashoutsScreen.tsx
 import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
@@ -11,8 +11,8 @@ import {
   View,
 } from "react-native";
 
-import { BASE_URL } from "./lib/api";
-import { OWNER_TOKEN } from "../lib/ownerToken";
+import { BASE_URL } from "../lib/api";
+import { ownerAuthHeaders } from "../lib/ownerToken";
 
 type Cashout = {
   id: number;
@@ -35,68 +35,55 @@ export default function CashoutsScreen() {
   const [amountUsd, setAmountUsd] = useState("5");
 
   async function api(path: string, init?: RequestInit) {
+    const headers = await ownerAuthHeaders();
     const res = await fetch(`${BASE_URL}${path}`, {
       ...(init || {}),
       headers: {
-        Authorization: `Bearer ${OWNER_TOKEN}`,
+        ...(headers as any),
+        // ensure JSON for POSTs; harmless for GET
         "Content-Type": "application/json",
-        ...(init?.headers || {}),
-      } as any,
+      },
     });
 
-    const text = await res.text();
-    let data: any;
-    try {
-      data = text ? JSON.parse(text) : null;
-    } catch {
-      data = text;
-    }
-
+    const json = await res.json().catch(() => null);
     if (!res.ok) {
-      const msg =
-        typeof data === "object" && data?.message
-          ? data.message
-          : typeof data === "string"
-          ? data
-          : `HTTP ${res.status}`;
-      throw new Error(msg);
+      const msg = (json && (json.message || json.error)) || `HTTP ${res.status}`;
+      throw new Error(String(msg));
     }
-
-    return data;
+    return json;
   }
 
   async function loadCashouts() {
     setLoading(true);
     try {
-      const list = await api("/wallet/cashouts");
-      setCashouts(Array.isArray(list) ? list : []);
+      const data = await api("/wallet/cashouts");
+      setCashouts(Array.isArray(data) ? data : []);
     } catch (e: any) {
-      Alert.alert("Load failed", String(e?.message || e));
+      Alert.alert("Cashouts", String(e?.message || e));
+      setCashouts([]);
     } finally {
       setLoading(false);
     }
   }
 
   async function createCashout() {
-    const usd = Number(amountUsd);
-    if (!isFinite(usd) || usd <= 0) {
-      Alert.alert("Invalid amount");
+    const value = parseFloat(String(amountUsd || "").replace(/[^0-9.]/g, ""));
+    if (!Number.isFinite(value) || value <= 0) {
+      Alert.alert("Cashout", "Enter a valid amount.");
       return;
     }
+
+    const amountCents = Math.round(value * 100);
 
     setPosting(true);
     try {
       await api("/wallet/cashout", {
         method: "POST",
-        body: JSON.stringify({
-          amountCents: Math.round(usd * 100),
-        }),
+        body: JSON.stringify({ amountCents }),
       });
-
       await loadCashouts();
-      Alert.alert("Success", "Cashout submitted.");
     } catch (e: any) {
-      Alert.alert("Cashout failed", String(e?.message || e));
+      Alert.alert("Cashout", String(e?.message || e));
     } finally {
       setPosting(false);
     }
@@ -132,9 +119,7 @@ export default function CashoutsScreen() {
           onPress={createCashout}
           disabled={posting}
         >
-          <Text style={styles.btnText}>
-            {posting ? "Posting..." : "Cash Out"}
-          </Text>
+          <Text style={styles.btnText}>{posting ? "Posting..." : "Cash Out"}</Text>
         </TouchableOpacity>
       </View>
 
@@ -143,15 +128,11 @@ export default function CashoutsScreen() {
         keyExtractor={(i) => String(i.id)}
         renderItem={({ item }) => (
           <View style={styles.row}>
-            <Text style={styles.amount}>
-              {dollarsFromCents(item.amountCents)}
-            </Text>
+            <Text style={styles.amount}>{dollarsFromCents(item.amountCents)}</Text>
             <Text style={styles.status}>{item.status}</Text>
           </View>
         )}
-        ListEmptyComponent={
-          <Text style={styles.empty}>No cashouts found.</Text>
-        }
+        ListEmptyComponent={<Text style={styles.empty}>No cashouts found.</Text>}
       />
     </View>
   );
@@ -160,8 +141,8 @@ export default function CashoutsScreen() {
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: "#0b0f19", padding: 16 },
   center: { flex: 1, justifyContent: "center", alignItems: "center" },
-  title: { color: "white", fontSize: 22, fontWeight: "700" },
-  card: { backgroundColor: "#111827", padding: 14, borderRadius: 12 },
+  title: { color: "white", fontSize: 22, fontWeight: "700", marginBottom: 12 },
+  card: { backgroundColor: "#111827", padding: 14, borderRadius: 12, marginBottom: 12 },
   label: { color: "#9ca3af" },
   input: {
     backgroundColor: "#1f2937",
@@ -182,8 +163,10 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     paddingVertical: 10,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: "#1f2937",
   },
   amount: { color: "white", fontWeight: "800" },
   status: { color: "#9ca3af" },
-  empty: { color: "#9ca3af", marginTop: 12 },
+  empty: { color: "#9ca3af", paddingVertical: 16 },
 });

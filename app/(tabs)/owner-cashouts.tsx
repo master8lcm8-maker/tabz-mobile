@@ -1,4 +1,4 @@
-// app/(tabs)/owner-cashouts.tsx
+// components/app/(tabs)/owner-cashouts.tsx
 import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
@@ -11,14 +11,13 @@ import {
   View,
 } from "react-native";
 
-// 🔒 VERIFIED WORKING VALUES
-const BASE_URL = "http://10.0.0.239:3000";
-const OWNER_TOKEN =
-  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOjMsImVtYWlsIjoib3duZXIzQHRhYnouYXBwIiwicm9sZSI6ImJ1eWVyIiwiaWF0IjoxNzY1NTkzNDg4LCJleHAiOjE3NjYxOTgyODh9.5dP5v6k_mmyCVRzIhLyFE00lV6kaV8SWFpLhtGMJJs4";
-
-// ✅ Web-safe: use query param instead of x-user-id header
-const USER_ID = "3";
-const QS = `?userId=${encodeURIComponent(USER_ID)}`;
+import {
+  apiGet,
+  apiPost,
+  getAuthToken,
+  getBaseUrl,
+  hydrateSession,
+} from "../../lib/api";
 
 type Cashout = {
   id: number;
@@ -41,46 +40,25 @@ export default function OwnerCashoutsTab() {
   const [cashouts, setCashouts] = useState<Cashout[]>([]);
   const [amountUsd, setAmountUsd] = useState("5");
 
-  async function api(path: string, init?: RequestInit) {
-    const url = `${BASE_URL}${path}`;
-    const res = await fetch(url, {
-      ...(init || {}),
-      headers: {
-        Authorization: `Bearer ${OWNER_TOKEN}`,
-        "Content-Type": "application/json",
-        ...(init?.headers || {}),
-      } as any,
-    });
+  async function ensureSessionReady() {
+    // Safe to call repeatedly; releases hydration gate.
+    await hydrateSession();
 
-    const text = await res.text();
-    let data: any = null;
-    try {
-      data = text ? JSON.parse(text) : null;
-    } catch {
-      data = text;
+    const token = getAuthToken();
+    if (!token) {
+      throw new Error("Not authenticated. Please log in first.");
     }
-
-    if (!res.ok) {
-      const msg =
-        typeof data === "object" && data?.message
-          ? data.message
-          : typeof data === "string" && data.length
-          ? data
-          : `HTTP ${res.status}`;
-      throw new Error(`[${res.status}] ${msg}`);
-    }
-
-    return data;
   }
 
   async function loadCashouts() {
     setLoading(true);
     try {
-      // ✅ GET /wallet/cashouts (plural)
-      const list = await api(`/wallet/cashouts${QS}`);
-      setCashouts(Array.isArray(list) ? list : []);
+      await ensureSessionReady();
+      const list = await apiGet("/wallet/cashouts");
+      setCashouts(Array.isArray(list) ? (list as Cashout[]) : []);
     } catch (e: any) {
       Alert.alert("Load failed", String(e?.message || e));
+      setCashouts([]);
     } finally {
       setLoading(false);
     }
@@ -97,14 +75,14 @@ export default function OwnerCashoutsTab() {
 
     setPosting(true);
     try {
-      // ✅ POST /wallet/cashout (singular) with body { amountCents }
-      await api(`/wallet/cashout${QS}`, {
-        method: "POST",
-        body: JSON.stringify({ amountCents }),
-      });
+      await ensureSessionReady();
+      await apiPost("/wallet/cashout", { amountCents });
 
       await loadCashouts();
-      Alert.alert("Success", `Cashout created for ${dollarsFromCents(amountCents)}.`);
+      Alert.alert(
+        "Success",
+        `Cashout created for ${dollarsFromCents(amountCents)}.`
+      );
     } catch (e: any) {
       Alert.alert("Cashout failed", String(e?.message || e));
     } finally {
@@ -114,6 +92,7 @@ export default function OwnerCashoutsTab() {
 
   useEffect(() => {
     loadCashouts();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   if (loading) {
@@ -127,21 +106,6 @@ export default function OwnerCashoutsTab() {
   return (
     <View style={styles.root}>
       <Text style={styles.title}>Owner Cashouts</Text>
-
-      {/* Y6: Cashout disclosure (required) */}
-      <View style={styles.disclosure}>
-        <Text style={styles.disclosureTitle}>Before you cash out</Text>
-        <Text style={styles.disclosureText}>
-          • Identity verification may be required before payouts are approved.
-        </Text>
-        <Text style={styles.disclosureText}>
-          • Cashouts are not instant. Processing can take time (often 1–5 business days) depending on review
-          and your bank.
-        </Text>
-        <Text style={styles.disclosureText}>
-          • If details are missing or verification fails, your cashout may be rejected and you will see a reason.
-        </Text>
-      </View>
 
       <View style={styles.card}>
         <Text style={styles.label}>Amount (USD)</Text>
@@ -163,7 +127,7 @@ export default function OwnerCashoutsTab() {
         </TouchableOpacity>
 
         <Text style={styles.note}>
-          Uses: GET {BASE_URL}/wallet/cashouts{QS} and POST {BASE_URL}/wallet/cashout{QS}
+          Uses: GET {getBaseUrl()}/wallet/cashouts and POST {getBaseUrl()}/wallet/cashout
         </Text>
       </View>
 
@@ -193,17 +157,6 @@ const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: "#0b0f19", padding: 16 },
   center: { flex: 1, justifyContent: "center", alignItems: "center" },
   title: { color: "white", fontSize: 22, marginBottom: 12, fontWeight: "700" },
-
-  disclosure: {
-    backgroundColor: "#0f172a",
-    borderWidth: 1,
-    borderColor: "#1f2937",
-    borderRadius: 12,
-    padding: 12,
-    marginBottom: 12,
-  },
-  disclosureTitle: { color: "white", fontWeight: "800", marginBottom: 6 },
-  disclosureText: { color: "#cbd5e1", fontSize: 12, lineHeight: 18 },
 
   card: {
     backgroundColor: "#111827",

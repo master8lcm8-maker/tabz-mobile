@@ -1,4 +1,4 @@
-// ======================================================
+﻿// ======================================================
 // components/OwnerWalletScreen.tsx
 // Owner wallet screen (summary + metrics + cashouts)
 // WEB FIX: do NOT send x-user-id header (CORS blocks it)
@@ -17,8 +17,8 @@ import {
   View,
 } from 'react-native';
 
-import { BASE_URL } from "./lib/api";
-import { OWNER_TOKEN, OWNER_USER_ID } from "../lib/ownerToken";
+import { BASE_URL } from "../lib/api";
+import { ownerAuthHeaders, OWNER_USER_ID } from "../lib/ownerToken";
 
 type Summary = {
   balanceCents: number;
@@ -51,9 +51,16 @@ function formatMoney(cents: number) {
 }
 
 export default function OwnerWalletScreen() {
-  const token = OWNER_TOKEN;
 
-  // ✅ Web-safe: pass userId via query param (not a header)
+  // Web-safe: do NOT send x-user-id header (CORS can block it).
+  // We pass userId via query param (controller supports it).
+  const authHeaders = async () => {
+    const h: any = await ownerAuthHeaders();
+    // Strip x-user-id (always) to be safe across web/proxies
+    try { delete h["x-user-id"]; } catch {}
+    return h;
+  };
+// âœ… Web-safe: pass userId via query param (not a header)
   const userId = OWNER_USER_ID || '3';
   const qs = useMemo(() => `?userId=${encodeURIComponent(String(userId))}`, [userId]);
 
@@ -68,23 +75,15 @@ export default function OwnerWalletScreen() {
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const authHeaders = useMemo(() => {
-    // ✅ IMPORTANT: NO x-user-id header (CORS preflight blocks it on web)
-    return () => ({
-      Authorization: `Bearer ${token}`,
-      'Content-Type': 'application/json',
-    });
-  }, [token]);
-
   const loadAll = async () => {
     try {
       setLoading(true);
       setError(null);
 
       const [summaryRes, metricsRes, cashoutsRes] = await Promise.all([
-        fetch(`${BASE_URL}/wallet/summary${qs}`, { headers: authHeaders() }),
-        fetch(`${BASE_URL}/wallet/metrics${qs}`, { headers: authHeaders() }),
-        fetch(`${BASE_URL}/wallet/cashouts${qs}`, { headers: authHeaders() }),
+        fetch(`${BASE_URL}/wallet/summary${qs}`, { headers: await authHeaders() }),
+        fetch(`${BASE_URL}/wallet/metrics${qs}`, { headers: await authHeaders() }),
+        fetch(`${BASE_URL}/wallet/cashouts${qs}`, { headers: await authHeaders() }),
       ]);
 
       const summaryJson = await summaryRes.json().catch(() => null);
@@ -132,7 +131,7 @@ export default function OwnerWalletScreen() {
 
       const res = await fetch(`${BASE_URL}/wallet/cashout${qs}`, {
         method: 'POST',
-        headers: authHeaders(),
+        headers: await authHeaders(),
         body: JSON.stringify({ amountCents }),
       });
 
@@ -161,7 +160,7 @@ export default function OwnerWalletScreen() {
 
       const res = await fetch(`${BASE_URL}/wallet/cashouts/${cashoutId}/cancel${qs}`, {
         method: 'POST',
-        headers: authHeaders(),
+        headers: await authHeaders(),
       });
 
       if (!res.ok) {
@@ -183,7 +182,7 @@ export default function OwnerWalletScreen() {
 
       const res = await fetch(`${BASE_URL}/wallet/cashouts/${cashoutId}/retry${qs}`, {
         method: 'POST',
-        headers: authHeaders(),
+        headers: await authHeaders(),
       });
 
       if (!res.ok) {
@@ -355,3 +354,6 @@ const styles = StyleSheet.create({
   },
   smallBtnText: { color: '#7CFC00', fontWeight: '800' },
 });
+
+
+

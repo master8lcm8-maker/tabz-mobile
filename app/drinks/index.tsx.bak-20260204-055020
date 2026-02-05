@@ -1,26 +1,41 @@
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import React, {
-    useCallback,
-    useEffect,
-    useRef,
-    useState,
-} from 'react';
-import {
-    ActivityIndicator,
-    Alert,
-    FlatList,
-    RefreshControl,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
-} from 'react-native';
+// app/drinks/index.tsx
 
-// TODO: later we will inject this token from real auth flow
-const BASE_URL = 'http://localhost:3000';
-const HARD_CODED_TOKEN =
-  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOjEsImVtYWlsIjoiZGVtb0B0YWJ6LmFwcCIsImlhdCI6MTc2NDU3NTUxOCwiZXhwIjoxNzY1MTgwMzE4fQ.jSu0o5jnWRqQr_P_gh2H4efZ7krNOqwAW4C0DX2wtj4';
+import React, { useCallback, useEffect, useRef, useState } from "react";
+import {
+  ActivityIndicator,
+  Alert,
+  FlatList,
+  RefreshControl,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+
+// FIX: web bundler cannot resolve "@/..." because alias isn't configured.
+// Use relative imports from app/drinks -> components (two levels up)
+import { ThemedText } from "../../components/themed-text";
+import { ThemedView } from "../../components/themed-view";
+
+// ---- Base URL + Token sourcing (NO DEV HARDCODES) ----
+const PROD_BASE_URL = "https://tabz-backend-bxxbf.ondigitalocean.app";
+const ENV_BASE_URL = (process.env.EXPO_PUBLIC_BASE_URL || "").trim();
+const AUTH_TOKEN_KEY = "TABZ_AUTH_TOKEN";
+
+function getBaseUrl(): string {
+  return ENV_BASE_URL || PROD_BASE_URL;
+}
+
+async function getAuthTokenOrThrow(): Promise<string> {
+  const tok = (await AsyncStorage.getItem(AUTH_TOKEN_KEY)) || "";
+  if (!tok.trim()) {
+    throw new Error(
+      `Missing auth token. Log in first so "${AUTH_TOKEN_KEY}" is set.`
+    );
+  }
+  return tok.trim();
+}
 
 type ItemSnapshot = {
   id: number;
@@ -54,46 +69,32 @@ export default function DrinksScreen() {
   // Track if a fetch is already in-flight so auto-refresh doesn't overlap calls
   const isFetchingRef = useRef(false);
 
-  const hasToken = !!HARD_CODED_TOKEN;
+  const baseUrl = getBaseUrl();
 
   const fetchOrders = useCallback(
     async (opts?: { showSpinner?: boolean }) => {
       const showSpinner = opts?.showSpinner ?? true;
 
-      if (!hasToken) {
-        setError(
-          'Missing auth token (temporary hard-coded token is empty).',
-        );
-        return;
-      }
-
-      if (isFetchingRef.current) {
-        // Avoid overlapping requests; skip if one is already running
-        return;
-      }
+      if (isFetchingRef.current) return;
 
       isFetchingRef.current = true;
       setError(null);
       if (showSpinner) setLoading(true);
 
       try {
-        const res = await fetch(`${BASE_URL}/store-items/venue-orders`, {
-          method: 'GET',
+        const token = await getAuthTokenOrThrow();
+
+        const res = await fetch(`${baseUrl}/store-items/venue-orders`, {
+          method: "GET",
           headers: {
-            Authorization: `Bearer ${HARD_CODED_TOKEN}`,
+            Authorization: `Bearer ${token}`,
           },
         });
 
         if (!res.ok) {
           const text = await res.text();
-          console.error(
-            '[DrinksScreen] Failed to fetch orders:',
-            res.status,
-            text,
-          );
-          setError(
-            `Failed to load orders (status ${res.status}). Check backend logs.`,
-          );
+          console.error("[DrinksScreen] Failed to fetch orders:", res.status, text);
+          setError(`Failed to load orders (status ${res.status}). Check backend logs.`);
           setOrders([]);
           return;
         }
@@ -101,18 +102,15 @@ export default function DrinksScreen() {
         const data = (await res.json()) as DrinkOrder[];
         setOrders(Array.isArray(data) ? data : []);
       } catch (err: any) {
-        console.error(
-          '[DrinksScreen] Network error while loading orders:',
-          err,
-        );
-        setError('Network error while loading orders');
+        console.error("[DrinksScreen] Network/auth error while loading orders:", err);
+        setError(String(err?.message || "Network/auth error while loading orders"));
         setOrders([]);
       } finally {
         if (showSpinner) setLoading(false);
         isFetchingRef.current = false;
       }
     },
-    [hasToken],
+    [baseUrl]
   );
 
   // Initial load (show spinner)
@@ -136,12 +134,12 @@ export default function DrinksScreen() {
   }, [fetchOrders]);
 
   const formatPrice = (cents?: number) => {
-    if (typeof cents !== 'number') return '$0.00';
+    if (typeof cents !== "number") return "$0.00";
     return `$${(cents / 100).toFixed(2)}`;
   };
 
   const formatDateTime = (iso?: string) => {
-    if (!iso) return 'Unknown';
+    if (!iso) return "Unknown";
     try {
       const d = new Date(iso);
       return d.toLocaleString();
@@ -151,51 +149,33 @@ export default function DrinksScreen() {
   };
 
   const updateStatus = async (orderId: number, newStatus: string) => {
-    if (!hasToken) {
-      Alert.alert(
-        'Auth missing',
-        'No token set. Later this will be wired to real login.',
-      );
-      return;
-    }
-
     setUpdatingId(orderId);
     setError(null);
 
     try {
-      const res = await fetch(
-        `${BASE_URL}/store-items/order/${orderId}/status`,
-        {
-          method: 'PATCH',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${HARD_CODED_TOKEN}`,
-          },
-          body: JSON.stringify({ status: newStatus }),
+      const token = await getAuthTokenOrThrow();
+
+      const res = await fetch(`${baseUrl}/store-items/order/${orderId}/status`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
         },
-      );
+        body: JSON.stringify({ status: newStatus }),
+      });
 
       if (!res.ok) {
         const text = await res.text();
-        console.error(
-          '[DrinksScreen] Failed to update status:',
-          res.status,
-          text,
-        );
-        setError(
-          `Failed to update status (status ${res.status}). See backend logs.`,
-        );
+        console.error("[DrinksScreen] Failed to update status:", res.status, text);
+        setError(`Failed to update status (status ${res.status}). See backend logs.`);
         return;
       }
 
       // Refetch list after update (no spinner)
       await fetchOrders({ showSpinner: false });
     } catch (err: any) {
-      console.error(
-        '[DrinksScreen] Network error while updating status:',
-        err,
-      );
-      setError('Network error while updating order status');
+      console.error("[DrinksScreen] Network/auth error while updating status:", err);
+      setError(String(err?.message || "Network/auth error while updating order status"));
     } finally {
       setUpdatingId(null);
     }
@@ -213,10 +193,8 @@ export default function DrinksScreen() {
         <ThemedText>
           Qty: {item.quantity} • Status: {item.status}
         </ThemedText>
-        <ThemedText>
-          Price: {formatPrice(priceCents)} per unit
-        </ThemedText>
-        <ThemedText>Venue ID: {item.venueId ?? 'N/A'}</ThemedText>
+        <ThemedText>Price: {formatPrice(priceCents)} per unit</ThemedText>
+        <ThemedText>Venue ID: {item.venueId ?? "N/A"}</ThemedText>
         <ThemedText style={styles.metaText}>
           Order ID: {item.id} • User: {item.userId}
         </ThemedText>
@@ -231,21 +209,21 @@ export default function DrinksScreen() {
             targetStatus="preparing"
             currentStatus={item.status}
             disabled={isUpdating}
-            onPress={() => updateStatus(item.id, 'preparing')}
+            onPress={() => updateStatus(item.id, "preparing")}
           />
           <StatusButton
             label="Ready"
             targetStatus="ready"
             currentStatus={item.status}
             disabled={isUpdating}
-            onPress={() => updateStatus(item.id, 'ready')}
+            onPress={() => updateStatus(item.id, "ready")}
           />
           <StatusButton
             label="Delivered"
             targetStatus="delivered"
             currentStatus={item.status}
             disabled={isUpdating}
-            onPress={() => updateStatus(item.id, 'delivered')}
+            onPress={() => updateStatus(item.id, "delivered")}
           />
         </View>
 
@@ -299,9 +277,7 @@ export default function DrinksScreen() {
         contentContainerStyle={
           orders.length === 0 ? styles.listEmptyContent : styles.listContent
         }
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-        }
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
       />
     </ThemedView>
   );
@@ -353,26 +329,26 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
   },
   title: {
-    textAlign: 'center',
+    textAlign: "center",
     marginBottom: 16,
-    fontWeight: 'bold',
+    fontWeight: "bold",
   },
   errorBox: {
     borderRadius: 8,
     padding: 10,
     marginBottom: 12,
-    backgroundColor: 'rgba(200,0,0,0.15)',
+    backgroundColor: "rgba(200,0,0,0.15)",
   },
   errorTitle: {
-    fontWeight: 'bold',
+    fontWeight: "bold",
     marginBottom: 4,
   },
   loadingBox: {
-    alignItems: 'center',
+    alignItems: "center",
     marginTop: 24,
   },
   emptyBox: {
-    alignItems: 'center',
+    alignItems: "center",
     marginTop: 24,
   },
   emptySub: {
@@ -390,10 +366,10 @@ const styles = StyleSheet.create({
     padding: 12,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.1)',
+    borderColor: "rgba(255,255,255,0.1)",
   },
   cardTitle: {
-    fontWeight: 'bold',
+    fontWeight: "bold",
     marginBottom: 4,
   },
   metaText: {
@@ -401,7 +377,7 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   buttonRow: {
-    flexDirection: 'row',
+    flexDirection: "row",
     marginTop: 8,
     gap: 8,
   },
@@ -410,11 +386,11 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     borderRadius: 6,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.3)',
+    borderColor: "rgba(255,255,255,0.3)",
   },
   statusButtonActive: {
-    backgroundColor: 'rgba(0,180,0,0.25)',
-    borderColor: 'rgba(0,200,0,0.9)',
+    backgroundColor: "rgba(0,180,0,0.25)",
+    borderColor: "rgba(0,200,0,0.9)",
   },
   statusButtonDisabled: {
     opacity: 0.5,
@@ -423,11 +399,11 @@ const styles = StyleSheet.create({
     fontSize: 12,
   },
   statusButtonTextActive: {
-    fontWeight: 'bold',
+    fontWeight: "bold",
   },
   updatingRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     marginTop: 6,
     gap: 6,
   },

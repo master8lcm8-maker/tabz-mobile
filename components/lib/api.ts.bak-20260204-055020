@@ -7,8 +7,7 @@ const BASEURL_KEY = "TABZ_API_BASE_URL";
 const AUTH_TOKEN_KEY = "TABZ_AUTH_TOKEN";
 
 // Default backend base URL (can be overridden via setBaseUrl / hydrateBaseUrl / env)
-const DEFAULT_BASE_URL =
-  process.env.EXPO_PUBLIC_TABZ_API_BASE_URL || "http://127.0.0.1:3000";
+const DEFAULT_BASE_URL = "https://tabz-backend-bxxbf.ondigitalocean.app";
 
 // Base URL used by all requests (hydrated from storage/env on boot)
 export let BASE_URL = DEFAULT_BASE_URL;
@@ -47,12 +46,9 @@ const hydrationPromise: Promise<void> = new Promise<void>((resolve) => {
 });
 
 // Fail-open safety: avoid indefinite hang if hydrateSession is not called.
-// IMPORTANT: On WEB we must NEVER fail-open. Web must hydrate from localStorage
-// before any authed request, otherwise we send empty Bearer and get 401.
-const HYDRATION_FAILOPEN_MS = Platform.OS === "web" ? 0 : 1500;
-
+const HYDRATION_FAILOPEN_MS = 1500;
 const hydrationFailOpenTimer =
-  HYDRATION_FAILOPEN_MS > 0 && typeof setTimeout === "function"
+  typeof setTimeout === "function"
     ? setTimeout(() => {
         if (!hydrationReleased && hydrationResolve) {
           hydrationResolve();
@@ -556,4 +552,3 @@ export async function getBankInfoSummary(): Promise<BankInfoSummary> {
     raw: info,
   };
 }
-

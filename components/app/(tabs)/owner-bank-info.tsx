@@ -1,4 +1,4 @@
-// app/(tabs)/owner-bank-info.tsx
+﻿// app/(tabs)/owner-bank-info.tsx
 import React, { useEffect, useState } from "react";
 import {
   View,
@@ -10,7 +10,7 @@ import {
   ActivityIndicator,
 } from "react-native";
 import { useRouter } from "expo-router";
-import { apiGet, apiPost } from "../../components/lib/api";
+import { apiGet, apiPost } from "../../lib/api";
 
 export default function OwnerBankInfoScreen() {
   const router = useRouter();
@@ -90,7 +90,7 @@ export default function OwnerBankInfoScreen() {
         {loading ? (
           <View style={{ paddingVertical: 12, alignItems: "center" }}>
             <ActivityIndicator />
-            <Text style={styles.loadingText}>Loading…</Text>
+            <Text style={styles.loadingText}>Loadingâ€¦</Text>
           </View>
         ) : null}
 
@@ -209,3 +209,4 @@ const styles = StyleSheet.create({
     fontWeight: "900",
   },
 });
+
