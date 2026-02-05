@@ -1,4 +1,4 @@
-// app/(tabs)/owner-payout-math.tsx
+﻿// app/(tabs)/owner-payout-math.tsx
 import React, { useEffect, useMemo, useState } from "react";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
 import { useLocalSearchParams } from "expo-router";
@@ -24,13 +24,13 @@ type Summary = {
   [k: string]: any;
 };
 
-// ✅ SINGLE SOURCE OF TRUTH (from your PowerShell output)
+// âœ… SINGLE SOURCE OF TRUTH (from your PowerShell output)
 const OWNER_FRESH_TOKEN =
   "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOjMsImVtYWlsIjoib3duZXIzQHRhYnouYXBwIiwicm9sZSI6ImJ1eWVyIiwiaWF0IjoxNzY1NTkzNDg4LCJleHAiOjE3NjYxOTgyODh9.5dP5v6k_mmyCVRzIhLyFE00lV6kaV8SWFpLhtGMJJs4";
 
-// Your browser is currently calling 10.0.0.239:3000 (per DevTools)
+// Your browser is currently calling :3000 (per DevTools)
 // Keep default aligned to what you're actually hitting to avoid split-brain.
-const DEFAULT_BASE_URL = "http://10.0.0.239:3000";
+const DEFAULT_BASE_URL = process.env.EXPO_PUBLIC_TABZ_API_BASE_URL || "";
 
 function toDollars(cents: number) {
   return (cents / 100).toFixed(2);
@@ -253,3 +253,5 @@ const styles = StyleSheet.create({
 
   errText: { color: "#FF6B6B", marginTop: 8 },
 });
+
+

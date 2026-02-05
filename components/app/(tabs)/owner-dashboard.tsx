@@ -1,4 +1,4 @@
-// app/(tabs)/owner-dashboard.tsx
+﻿// app/(tabs)/owner-dashboard.tsx
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
@@ -23,10 +23,10 @@ export default function OwnerDashboardScreen() {
   // Base URL can still come from URL for convenience
   const BASE_URL = useMemo(() => {
     const b = baseUrlFromUrl?.trim();
-    return b && b.length > 0 ? b : 'http://10.0.0.239:3000';
+    return b && b.length > 0 ? b : '';
   }, [baseUrlFromUrl]);
 
-  // ✅ BEST FOR THE APP:
+  // âœ… BEST FOR THE APP:
   // Token comes from the single source of truth (login flow), not URL params
   const { getAuthToken } = require('../../components/lib/api');
   const TOKEN: string = getAuthToken?.() || '';
@@ -42,7 +42,7 @@ export default function OwnerDashboardScreen() {
     if (!TOKEN) {
       setWallet(null);
       setLoading(false);
-     setDashError('Not authenticated. Please log in (and optional &baseUrl=http://10.0.0.239:3000)');
+     setDashError('Not authenticated. Please log in (and optional &baseUrl=)');
       return;
     }
 
@@ -96,7 +96,7 @@ export default function OwnerDashboardScreen() {
     return (
       <View style={styles.center}>
         <ActivityIndicator />
-        <Text style={styles.muted}>Loading dashboard…</Text>
+        <Text style={styles.muted}>Loading dashboardâ€¦</Text>
       </View>
     );
   }
@@ -173,3 +173,4 @@ const styles = StyleSheet.create({
   },
   refreshText: { fontWeight: '700' },
 });
+

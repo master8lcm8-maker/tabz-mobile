@@ -10,7 +10,7 @@ import {
   getEnvBaseUrl,
 } from "../components/lib/api";
 
-const DEFAULT_BASE_URL = process.env.EXPO_PUBLIC_TABZ_API_BASE_URL || "http://127.0.0.1:3000";
+const DEFAULT_BASE_URL = process.env.EXPO_PUBLIC_TABZ_API_BASE_URL || "";
 
 export default function RootLayout() {
   const [ready, setReady] = useState(false);
@@ -59,4 +59,5 @@ export default function RootLayout() {
     </Stack>
   );
 }
+
 
