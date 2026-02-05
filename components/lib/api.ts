@@ -1,4 +1,4 @@
-// components/lib/api.ts
+﻿// components/lib/api.ts
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Platform } from "react-native";
 
@@ -8,7 +8,7 @@ const AUTH_TOKEN_KEY = "TABZ_AUTH_TOKEN";
 
 // Default backend base URL (can be overridden via setBaseUrl / hydrateBaseUrl / env)
 const DEFAULT_BASE_URL =
-  process.env.EXPO_PUBLIC_TABZ_API_BASE_URL || "http://127.0.0.1:3000";
+  process.env.EXPO_PUBLIC_TABZ_API_BASE_URL || "";
 
 // Base URL used by all requests (hydrated from storage/env on boot)
 export let BASE_URL = DEFAULT_BASE_URL;
@@ -267,7 +267,7 @@ function unwrapResponse<T = any>(data: any): T {
 }
 
 async function request(method: "GET" | "POST", path: string, body?: any) {
-  // 🔒 Ensure BASE_URL + token hydration happened before we fire requests
+  // ðŸ”’ Ensure BASE_URL + token hydration happened before we fire requests
   await awaitHydration();
 
   const url = BASE_URL + path;
@@ -318,7 +318,7 @@ export async function apiUploadMultipart(
   file: File | Blob | NativeFile,
   fieldName: string = "file"
 ) {
-  // 🔒 Ensure BASE_URL + token hydration happened before we fire requests
+  // ðŸ”’ Ensure BASE_URL + token hydration happened before we fire requests
   await awaitHydration();
 
   const url = BASE_URL + path;
@@ -382,7 +382,7 @@ export async function loginWithPassword(
   email: string,
   password: string
 ): Promise<string> {
-  // 🔒 Ensure BASE_URL hydration occurred before login attempts.
+  // ðŸ”’ Ensure BASE_URL hydration occurred before login attempts.
   await awaitHydration();
 
   const endpoints = [
@@ -556,4 +556,5 @@ export async function getBankInfoSummary(): Promise<BankInfoSummary> {
     raw: info,
   };
 }
+
 

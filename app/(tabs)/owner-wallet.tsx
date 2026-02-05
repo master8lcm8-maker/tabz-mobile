@@ -28,7 +28,7 @@ type Cashout = {
 };
 
 // ---- Base URL + Token sourcing (NO DEV HARDCODES) ----
-const PROD_BASE_URL = process.env.EXPO_PUBLIC_TABZ_API_BASE_URL || "http://127.0.0.1:3000";
+const PROD_BASE_URL = process.env.EXPO_PUBLIC_TABZ_API_BASE_URL || "";
 const ENV_BASE_URL = (process.env.EXPO_PUBLIC_BASE_URL || "").trim();
 const AUTH_TOKEN_KEY = "TABZ_AUTH_TOKEN";
 
@@ -251,4 +251,5 @@ const styles = StyleSheet.create({
 
   muted: { color: "#B9C2CF" },
 });
+
 

@@ -1,4 +1,4 @@
-// app/(tabs)/owner-cashouts.tsx
+﻿// app/(tabs)/owner-cashouts.tsx
 import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
@@ -11,12 +11,12 @@ import {
   View,
 } from "react-native";
 
-// 🔒 VERIFIED WORKING VALUES
-const BASE_URL = "http://10.0.0.239:3000";
+// ðŸ”’ VERIFIED WORKING VALUES
+const BASE_URL = process.env.EXPO_PUBLIC_TABZ_API_BASE_URL || "";
 const OWNER_TOKEN =
   "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOjMsImVtYWlsIjoib3duZXIzQHRhYnouYXBwIiwicm9sZSI6ImJ1eWVyIiwiaWF0IjoxNzY1NTkzNDg4LCJleHAiOjE3NjYxOTgyODh9.5dP5v6k_mmyCVRzIhLyFE00lV6kaV8SWFpLhtGMJJs4";
 
-// ✅ Web-safe: use query param instead of x-user-id header
+// âœ… Web-safe: use query param instead of x-user-id header
 const USER_ID = "3";
 const QS = `?userId=${encodeURIComponent(USER_ID)}`;
 
@@ -76,7 +76,7 @@ export default function OwnerCashoutsTab() {
   async function loadCashouts() {
     setLoading(true);
     try {
-      // ✅ GET /wallet/cashouts (plural)
+      // âœ… GET /wallet/cashouts (plural)
       const list = await api(`/wallet/cashouts${QS}`);
       setCashouts(Array.isArray(list) ? list : []);
     } catch (e: any) {
@@ -97,7 +97,7 @@ export default function OwnerCashoutsTab() {
 
     setPosting(true);
     try {
-      // ✅ POST /wallet/cashout (singular) with body { amountCents }
+      // âœ… POST /wallet/cashout (singular) with body { amountCents }
       await api(`/wallet/cashout${QS}`, {
         method: "POST",
         body: JSON.stringify({ amountCents }),
@@ -217,3 +217,4 @@ const styles = StyleSheet.create({
   status: { color: "#d1d5db", fontWeight: "800", marginLeft: 12 },
   empty: { color: "#9ca3af", paddingTop: 8 },
 });
+

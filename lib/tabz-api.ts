@@ -10,7 +10,7 @@ const ENV_BASE_URL =
 
 // Safe fallback for web builds if env is missing.
 // (Change this to your canonical production URL if different.)
-export const DEFAULT_BASE_URL = ENV_BASE_URL || process.env.EXPO_PUBLIC_TABZ_API_BASE_URL || "http://127.0.0.1:3000";
+export const DEFAULT_BASE_URL = ENV_BASE_URL || process.env.EXPO_PUBLIC_TABZ_API_BASE_URL || "";
 
 let AUTH_TOKEN: string | null = null;
 let API_BASE_URL: string = DEFAULT_BASE_URL;
@@ -130,4 +130,5 @@ export function getAuthHeaders() {
     Pragma: "no-cache",
   };
 }
+
 

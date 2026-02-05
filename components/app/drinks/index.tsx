@@ -1,4 +1,4 @@
-import { ThemedText } from '@/components/themed-text';
+﻿import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import React, {
     useCallback,
@@ -18,7 +18,7 @@ import {
 } from 'react-native';
 
 // TODO: later we will inject this token from real auth flow
-const BASE_URL = 'http://localhost:3000';
+const BASE_URL = process.env.EXPO_PUBLIC_TABZ_API_BASE_URL || '';
 const HARD_CODED_TOKEN =
   'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOjEsImVtYWlsIjoiZGVtb0B0YWJ6LmFwcCIsImlhdCI6MTc2NDU3NTUxOCwiZXhwIjoxNzY1MTgwMzE4fQ.jSu0o5jnWRqQr_P_gh2H4efZ7krNOqwAW4C0DX2wtj4';
 
@@ -211,14 +211,14 @@ export default function DrinksScreen() {
           {item.itemSnapshot?.name ?? `Item #${item.itemId}`}
         </ThemedText>
         <ThemedText>
-          Qty: {item.quantity} • Status: {item.status}
+          Qty: {item.quantity} â€¢ Status: {item.status}
         </ThemedText>
         <ThemedText>
           Price: {formatPrice(priceCents)} per unit
         </ThemedText>
         <ThemedText>Venue ID: {item.venueId ?? 'N/A'}</ThemedText>
         <ThemedText style={styles.metaText}>
-          Order ID: {item.id} • User: {item.userId}
+          Order ID: {item.id} â€¢ User: {item.userId}
         </ThemedText>
         <ThemedText style={styles.metaText}>
           Created: {formatDateTime(item.createdAt)}
@@ -252,7 +252,7 @@ export default function DrinksScreen() {
         {isUpdating && (
           <View style={styles.updatingRow}>
             <ActivityIndicator size="small" />
-            <Text style={styles.updatingText}>Updating status…</Text>
+            <Text style={styles.updatingText}>Updating statusâ€¦</Text>
           </View>
         )}
       </View>
@@ -279,7 +279,7 @@ export default function DrinksScreen() {
       {loading && !refreshing && (
         <View style={styles.loadingBox}>
           <ActivityIndicator size="large" />
-          <ThemedText>Loading orders…</ThemedText>
+          <ThemedText>Loading ordersâ€¦</ThemedText>
         </View>
       )}
 
@@ -435,3 +435,4 @@ const styles = StyleSheet.create({
     fontSize: 12,
   },
 });
+

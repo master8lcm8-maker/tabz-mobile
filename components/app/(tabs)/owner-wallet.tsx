@@ -1,4 +1,4 @@
-// app/(tabs)/owner-wallet.tsx
+﻿// app/(tabs)/owner-wallet.tsx
 import React, { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
@@ -26,12 +26,12 @@ type Cashout = {
   [k: string]: any;
 };
 
-// ✅ VERIFIED token from your PowerShell output (LOCKED)
+// âœ… VERIFIED token from your PowerShell output (LOCKED)
 const OWNER_FRESH_TOKEN =
   "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOjMsImVtYWlsIjoib3duZXIzQHRhYnouYXBwIiwicm9sZSI6ImJ1eWVyIiwiaWF0IjoxNzY1NTkzNDg4LCJleHAiOjE3NjYxOTgyODh9.5dP5v6k_mmyCVRzIhLyFE00lV6kaV8SWFpLhtGMJJs4";
 
-// Your browser requests are already going to 10.0.0.239:3000 (per DevTools).
-const DEFAULT_BASE_URL = "http://10.0.0.239:3000";
+// Your browser requests are already going to :3000 (per DevTools).
+const DEFAULT_BASE_URL = process.env.EXPO_PUBLIC_TABZ_API_BASE_URL || "";
 
 function dollars(cents?: number) {
   const v = Number(cents || 0) || 0;
@@ -103,7 +103,7 @@ export default function OwnerWalletTab() {
       setLoading(true);
       setErr(null);
 
-      // Console proof (so we can confirm it’s using the correct values)
+      // Console proof (so we can confirm itâ€™s using the correct values)
       console.log("[owner-wallet] baseUrl =", baseUrl);
       console.log("[owner-wallet] token(first20) =", token.slice(0, 20), "...");
 
@@ -250,3 +250,5 @@ const styles = StyleSheet.create({
 
   muted: { color: "#B9C2CF" },
 });
+
+
