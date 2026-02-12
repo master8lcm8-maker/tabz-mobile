@@ -3,16 +3,14 @@
 // cache-bust on load/upload, and force remount when validity flips.
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import {
-  View,
+import { View,
   Text,
   Image,
   ActivityIndicator,
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  Platform,
-} from "react-native";
+  Platform, Pressable } from "react-native";
 import { useRouter } from "expo-router";
 
 import {
@@ -54,7 +52,13 @@ function isTinyImage(w?: number, h?: number) {
 export default function MyProfileScreen() {
   const router = useRouter();
 
-  const [loading, setLoading] = useState(true);
+  
+
+  const handleLogout = useCallback(async () => {
+    await clearAuthToken();
+    router.replace("/login");
+  }, [router]);
+const [loading, setLoading] = useState(true);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
@@ -210,13 +214,6 @@ export default function MyProfileScreen() {
         {errorMsg ? <Text style={styles.mutedText}>{errorMsg}</Text> : null}
 
         <TouchableOpacity
-          style={styles.btn}
-          onPress={() => router.replace("/login")}
-        >
-          <Text style={styles.btnText}>Go to Login</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
           style={[styles.btn, styles.btnSecondary]}
           onPress={() => {
             setLoading(true);
@@ -299,7 +296,10 @@ export default function MyProfileScreen() {
 
       <View style={styles.info}>
         <Text style={styles.name}>{profile.displayName || "Unnamed User"}</Text>
-        <Text style={styles.debug}>{debugLine}</Text>
+        <Text style={styles.debug}>{debugLine}</Text>        
+        <Pressable onPress={handleLogout} style={styles.logoutBtn}>
+          <Text style={styles.logoutText}>Log out</Text>
+        </Pressable>
 
         {/* web-only upload buttons */}
         {Platform.OS === "web" ? (
@@ -406,4 +406,16 @@ const styles = StyleSheet.create({
   },
   btnSecondary: { backgroundColor: "#374151" },
   btnText: { color: "#fff", fontWeight: "800" },
+  logoutBtn: {
+    marginTop: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    backgroundColor: '#111',
+    borderRadius: 8,
+    alignSelf: 'flex-start',
+  },
+  logoutText: {
+    color: '#fff',
+    fontWeight: '600',
+  }
 });

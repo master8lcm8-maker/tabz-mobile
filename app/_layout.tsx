@@ -1,4 +1,4 @@
-﻿// D:\TABZ\tabz-mobile\app\_layout.tsx
+// D:\TABZ\tabz-mobile\app\_layout.tsx
 import React, { useEffect, useState } from "react";
 import { Stack, Redirect, useSegments } from "expo-router";
 import { Platform } from "react-native";
@@ -29,10 +29,10 @@ export default function RootLayout() {
   const segments = useSegments();
   const tok = getAuthToken();
 
-  const inLogin = segments.length > 0 && segments[0] === "login";
+  const inLogin = segments.includes("login" as any);
   const inStaff = segments.length > 0 && segments[0] === "staff";
 
-  // Donâ€™t redirect until storage hydration is done (prevents web refresh redirect-loop)
+  // Don’t redirect until storage hydration is done (prevents web refresh redirect-loop)
   if (!ready) return null;
 
   // If not authed -> force login

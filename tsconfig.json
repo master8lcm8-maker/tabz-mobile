@@ -11,4 +11,12 @@
     "types": ["react"]
   },
   "include": ["**/*.ts", "**/*.tsx", ".expo/types/**/*.ts", "expo-env.d.ts"]
+,
+  "exclude": [
+    "__ZIP_SCAN__",
+    "node_modules",
+    "dist",
+    "build",
+    ".expo"
+  ]
 }

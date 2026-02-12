@@ -10,7 +10,7 @@ import {
 } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
 
-import { DEFAULT_BASE_URL, getAuthHeaders, hasAuthToken } from '@/lib/tabz-api';
+import { apiGet, getAuthToken, getBaseUrl, setBaseUrl } from '@/components/lib/api';
 
 type BuyerOrder = {
   // NEW API shape (current backend)
@@ -50,8 +50,14 @@ export default function BuyerOrdersScreen() {
 
   const BASE_URL = useMemo(() => {
     const b = baseUrlFromUrl?.trim();
-    return b && b.length > 0 ? b : DEFAULT_BASE_URL;
+    return b && b.length > 0 ? b : getBaseUrl();
   }, [baseUrlFromUrl]);
+
+  useEffect(() => {
+    // Keep shared API base URL aligned with this screen
+    setBaseUrl(BASE_URL);
+  }, [BASE_URL]);
+
 
   const [orders, setOrders] = useState<BuyerOrder[]>([]);
   const [loading, setLoading] = useState(true);
@@ -62,14 +68,14 @@ export default function BuyerOrdersScreen() {
 
   const fetchWhoAmI = useCallback(async () => {
     try {
-      if (!hasAuthToken()) {
+      if (!getAuthToken()) {
         setWho(null);
         return null;
       }
 
       const res = await fetch(`${BASE_URL}/auth/me`, {
         method: 'GET',
-        headers: getAuthHeaders(),
+        headers: { Authorization: `Bearer ${getAuthToken()}` },
         cache: 'no-store' as any,
       });
 
@@ -97,7 +103,7 @@ export default function BuyerOrdersScreen() {
 
     try {
       // Phase 2.1 hardening: no auto-login, no URL token
-      if (!hasAuthToken()) {
+      if (!getAuthToken()) {
         throw new Error('Not authenticated. Set auth token before loading Buyer Orders.');
       }
 
@@ -105,7 +111,7 @@ export default function BuyerOrdersScreen() {
 
       const res = await fetch(`${BASE_URL}/store-items/my-orders`, {
         method: 'GET',
-        headers: getAuthHeaders(),
+        headers: { Authorization: `Bearer ${getAuthToken()}` },
         cache: 'no-store' as any,
       });
 
@@ -206,3 +212,6 @@ const styles = StyleSheet.create({
   cardTitle: { fontWeight: '700', marginBottom: 6 },
   cardLine: { opacity: 0.9 },
 });
+
+
+
