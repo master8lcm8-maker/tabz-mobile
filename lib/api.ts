@@ -1,6 +1,4 @@
-﻿/**
- * lib/api.ts
- * Compatibility facade so app/* can import "../../lib/api".
- * Canonical implementation lives in components/lib/api.ts.
- */
+﻿// lib/api.ts
+// IMPORTANT: shim that forces ALL imports to use the single canonical API module.
+// Do not add logic here. Edit components/lib/api.ts instead.
 export * from "../components/lib/api";

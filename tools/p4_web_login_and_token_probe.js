@@ -1,4 +1,5 @@
-﻿const path = require("path");
+﻿const os = require("os");
+const path = require("path");
 const { chromium } = require("playwright");
 
 (async () => {
@@ -7,8 +8,8 @@ const { chromium } = require("playwright");
   const password = process.argv[4] || "password";
   const key = "TABZ_AUTH_TOKEN";
 
-  const userDataDir = path.join(__dirname, ".pw-userdata");
-  const context = await chromium.launchPersistentContext(userDataDir, { headless: true });
+  const userDataDir = path.join(os.tmpdir(), "tabz-pw-userdata");
+const context = await chromium.launchPersistentContext(userDataDir, { headless: true });
   const page = await context.newPage();
 
   await page.goto(base + "/login", { waitUntil: "domcontentloaded", timeout: 120000 });
@@ -81,3 +82,4 @@ const { chromium } = require("playwright");
   console.error("WEB_LOGIN_PROBE_ERROR", e && e.stack ? e.stack : e);
   process.exit(1);
 });
+

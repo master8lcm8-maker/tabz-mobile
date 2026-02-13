@@ -1,12 +1,13 @@
-﻿const path = require("path");
+﻿const os = require("os");
+const path = require("path");
 const { chromium } = require("playwright");
 
 (async () => {
   const url = process.argv[2] || "http://localhost:8081";
   const key = "TABZ_AUTH_TOKEN";
 
-  const userDataDir = path.join(__dirname, ".pw-userdata");
-  const context = await chromium.launchPersistentContext(userDataDir, { headless: true });
+  const userDataDir = path.join(os.tmpdir(), "tabz-pw-userdata");
+const context = await chromium.launchPersistentContext(userDataDir, { headless: true });
   const page = await context.newPage();
 
   await page.goto(url, { waitUntil: "domcontentloaded", timeout: 120000 });
@@ -28,3 +29,4 @@ const { chromium } = require("playwright");
   console.error("PLAYWRIGHT_ERROR", e && e.stack ? e.stack : e);
   process.exit(1);
 });
+
