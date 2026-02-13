@@ -377,8 +377,8 @@ export async function loginWithPassword(email: string, password: string): Promis
   await awaitHydration();
 
   const endpoints = [
-    "/auth/login-owner",
     "/auth/login-buyer",
+    "/auth/login-owner",
     "/auth/login-staff",
     "/auth/login",
   ];
@@ -544,6 +544,7 @@ export async function getBankInfoSummary(): Promise<BankInfoSummary> {
     raw: info,
   };
 }
+
 
 
 

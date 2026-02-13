@@ -1,16 +1,19 @@
-﻿// app/(tabs)/profile.tsx
+// app/(tabs)/profile.tsx
 // Robust: use avatarValid/coverValid to decide fallback vs remote,
 // cache-bust on load/upload, and force remount when validity flips.
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { View,
+import {
+  View,
   Text,
   Image,
   ActivityIndicator,
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  Platform, Pressable } from "react-native";
+  Platform,
+  Pressable,
+} from "react-native";
 import { useRouter } from "expo-router";
 
 import {
@@ -21,7 +24,7 @@ import {
   getAuthToken,
 } from "../../components/lib/api";
 
-// âœ… Local fallback assets (MUST exist at these paths)
+// Local fallback assets (MUST exist)
 const FALLBACK_AVATAR = require("../../assets/images/tabz-avatar.png");
 const FALLBACK_COVER = require("../../assets/images/tabz-cover.png");
 
@@ -44,29 +47,23 @@ function getInitials(name: string | null | undefined) {
 }
 
 function isTinyImage(w?: number, h?: number) {
-  // âœ… Treat ONLY explicit 1x1 as invalid.
-  // On web, width/height can be undefined even for valid images.
   return w === 1 && h === 1;
 }
 
 export default function MyProfileScreen() {
   const router = useRouter();
 
-  
-
   const handleLogout = useCallback(async () => {
     await clearAuthToken();
     router.replace("/login");
   }, [router]);
-const [loading, setLoading] = useState(true);
+
+  const [loading, setLoading] = useState(true);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  // Validity gates (used to decide fallback vs remote)
   const [avatarValid, setAvatarValid] = useState(false);
   const [coverValid, setCoverValid] = useState(false);
-
-  // Cache-bust nonce: bump only on load/upload (not every render)
   const [imgNonce, setImgNonce] = useState(0);
 
   const initials = useMemo(
@@ -76,17 +73,28 @@ const [loading, setLoading] = useState(true);
 
   const loadProfile = useCallback(async () => {
     await hydrateAuthToken();
+
     const res: any = await apiGet("/profiles/me");
-    const p = (res?.profile ?? null) as Profile | null;
+
+    // 🔥 BULLETPROOF EXTRACTION
+    let p: Profile | null = null;
+
+    if (res?.profile) p = res.profile;
+    else if (Array.isArray(res?.profiles) && res.profiles.length > 0)
+      p = res.profiles[0];
+    else if (res?.profileId && Array.isArray(res?.profiles)) {
+      p = res.profiles.find((x: any) => x.id === res.profileId) ?? null;
+    }
+
+    if (!p) {
+      throw new Error("PROFILE_MISSING_IN_RESPONSE");
+    }
 
     setProfile(p);
     setErrorMsg(null);
 
-    // Start optimistic when URLs exist; onLoad/onError will correct it.
-    setAvatarValid(!!p?.avatarUrl);
-    setCoverValid(!!p?.coverUrl);
-
-    // Bust cache once when profile loads/refreshes
+    setAvatarValid(!!p.avatarUrl);
+    setCoverValid(!!p.coverUrl);
     setImgNonce((n) => n + 1);
   }, []);
 
@@ -107,7 +115,6 @@ const [loading, setLoading] = useState(true);
           return;
         }
 
-        // open file picker
         const input = document.createElement("input");
         input.type = "file";
         input.accept = "image/png,image/jpeg,image/webp";
@@ -120,37 +127,20 @@ const [loading, setLoading] = useState(true);
         if (!file) return;
 
         const fd = new FormData();
-        fd.append("file", file); // MUST be field name "file"
+        fd.append("file", file);
 
         const base = getBaseUrl();
         const url = `${base}/profiles/me/${kind}`;
 
         const res = await fetch(url, {
           method: "POST",
-          headers: {
-            Authorization: `Bearer ${token}`,
-            // DO NOT set Content-Type here (browser sets boundary)
-          },
+          headers: { Authorization: `Bearer ${token}` },
           body: fd,
         });
 
-        let data: any = null;
-        try {
-          data = await res.json();
-        } catch {}
+        if (!res.ok) throw new Error(`UPLOAD_${kind} failed`);
 
-        if (!res.ok) {
-          throw new Error(
-            `UPLOAD_${kind.toUpperCase()} failed: ${res.status} - ${JSON.stringify(
-              data
-            )}`
-          );
-        }
-
-        // Refresh profile so new URLs are pulled
         await loadProfile();
-
-        // Extra bump guarantees remount even if URL string repeats
         setImgNonce((n) => n + 1);
       } catch (e: any) {
         const msg = String(e?.message || e || "Upload failed");
@@ -169,25 +159,8 @@ const [loading, setLoading] = useState(true);
         await loadProfile();
       } catch (err: any) {
         if (!mounted) return;
-
-        const msg = String(err?.message || err || "");
-
-        if (msg.includes("AUTH_MISSING_WEB")) {
-          setProfile(null);
-          setErrorMsg("Not logged in. Please log in.");
-          return;
-        }
-
-        if (msg.includes(" failed: 401")) {
-          await clearAuthToken();
-          setProfile(null);
-          setErrorMsg("Session expired or invalid token. Please log in again.");
-          return;
-        }
-
         setProfile(null);
-        setErrorMsg("Failed to load profile.");
-        console.error("[profile] load failed", err);
+        setErrorMsg(String(err?.message || "Failed to load profile"));
       } finally {
         if (mounted) setLoading(false);
       }
@@ -212,39 +185,18 @@ const [loading, setLoading] = useState(true);
       <View style={styles.center}>
         <Text style={styles.mutedTitle}>Profile not available</Text>
         {errorMsg ? <Text style={styles.mutedText}>{errorMsg}</Text> : null}
-
-        <TouchableOpacity
-          style={[styles.btn, styles.btnSecondary]}
-          onPress={() => {
-            setLoading(true);
-            loadProfile()
-              .catch(() => {})
-              .finally(() => setLoading(false));
-          }}
-        >
-          <Text style={styles.btnText}>Retry</Text>
-        </TouchableOpacity>
       </View>
     );
   }
 
-  const debugLine = `type: ${profile.type} â€¢ avatarUrl: ${
-    profile.avatarUrl ? "yes" : "no"
-  } â€¢ coverUrl: ${profile.coverUrl ? "yes" : "no"} â€¢ platform: ${Platform.OS}`;
-
-  // Cache-bust only when imgNonce changes
   const avatarUri =
     profile.avatarUrl && avatarValid
-      ? `${profile.avatarUrl}${
-          profile.avatarUrl.includes("?") ? "&" : "?"
-        }v=${imgNonce}`
+      ? `${profile.avatarUrl}${profile.avatarUrl.includes("?") ? "&" : "?"}v=${imgNonce}`
       : null;
 
   const coverUri =
     profile.coverUrl && coverValid
-      ? `${profile.coverUrl}${
-          profile.coverUrl.includes("?") ? "&" : "?"
-        }v=${imgNonce}`
+      ? `${profile.coverUrl}${profile.coverUrl.includes("?") ? "&" : "?"}v=${imgNonce}`
       : null;
 
   const coverSource = coverUri ? { uri: coverUri } : FALLBACK_COVER;
@@ -252,10 +204,9 @@ const [loading, setLoading] = useState(true);
 
   return (
     <ScrollView style={styles.container}>
-      {/* Cover */}
       <View style={styles.coverWrap}>
         <Image
-          key={`${coverUri || "fallback-cover"}|${coverValid}|${imgNonce}`}
+          key={`${coverUri || "fallback-cover"}|${imgNonce}`}
           source={coverSource}
           style={styles.cover}
           resizeMode="cover"
@@ -263,18 +214,16 @@ const [loading, setLoading] = useState(true);
             if (!profile.coverUrl) return;
             const w = e?.nativeEvent?.source?.width;
             const h = e?.nativeEvent?.source?.height;
-            // If width/height missing, treat as valid (not tiny)
             setCoverValid(!isTinyImage(w, h));
           }}
           onError={() => setCoverValid(false)}
         />
       </View>
 
-      {/* Avatar */}
       <View style={styles.avatarWrap}>
         <View style={styles.avatarOuter}>
           <Image
-            key={`${avatarUri || "fallback-avatar"}|${avatarValid}|${imgNonce}`}
+            key={`${avatarUri || "fallback-avatar"}|${imgNonce}`}
             source={avatarSource}
             style={styles.avatar}
             resizeMode="cover"
@@ -296,12 +245,11 @@ const [loading, setLoading] = useState(true);
 
       <View style={styles.info}>
         <Text style={styles.name}>{profile.displayName || "Unnamed User"}</Text>
-        <Text style={styles.debug}>{debugLine}</Text>        
+
         <Pressable onPress={handleLogout} style={styles.logoutBtn}>
           <Text style={styles.logoutText}>Log out</Text>
         </Pressable>
 
-        {/* web-only upload buttons */}
         {Platform.OS === "web" ? (
           <View style={{ flexDirection: "row", gap: 10, marginTop: 10 }}>
             <TouchableOpacity
@@ -319,12 +267,6 @@ const [loading, setLoading] = useState(true);
           </View>
         ) : null}
 
-        {errorMsg ? (
-          <Text style={{ marginTop: 10, fontSize: 12, color: "#b91c1c" }}>
-            {errorMsg}
-          </Text>
-        ) : null}
-
         {profile.bio ? (
           <Text style={styles.bio}>{profile.bio}</Text>
         ) : (
@@ -337,16 +279,9 @@ const [loading, setLoading] = useState(true);
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#fff" },
-  center: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    padding: 16,
-  },
-
+  center: { flex: 1, alignItems: "center", justifyContent: "center" },
   coverWrap: { width: "100%", height: 180, backgroundColor: "#e5e5e5" },
   cover: { width: "100%", height: 180, backgroundColor: "#e5e5e5" },
-
   avatarWrap: { marginTop: -48, paddingHorizontal: 16 },
   avatarOuter: {
     width: 96,
@@ -358,36 +293,19 @@ const styles = StyleSheet.create({
     overflow: "hidden",
   },
   avatar: { width: 96, height: 96 },
-
   initialsOverlay: {
     position: "absolute",
     inset: 0,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "transparent",
   },
   initials: { color: "#111827", fontSize: 18, fontWeight: "900" },
-
   info: { paddingHorizontal: 16, paddingTop: 12, paddingBottom: 24 },
   name: { fontSize: 20, fontWeight: "600" },
-  debug: { marginTop: 6, fontSize: 12, color: "#6b7280" },
-
   bio: { marginTop: 10, fontSize: 14, color: "#333" },
-  bioMuted: {
-    marginTop: 10,
-    fontSize: 14,
-    color: "#999",
-    fontStyle: "italic",
-  },
-
+  bioMuted: { marginTop: 10, fontSize: 14, color: "#999", fontStyle: "italic" },
   mutedTitle: { fontSize: 16, fontWeight: "700", marginBottom: 6 },
-  mutedText: {
-    fontSize: 12,
-    color: "#666",
-    marginBottom: 12,
-    textAlign: "center",
-  },
-
+  mutedText: { fontSize: 12, color: "#666", marginBottom: 12 },
   btnSmall: {
     borderRadius: 10,
     paddingVertical: 10,
@@ -395,27 +313,14 @@ const styles = StyleSheet.create({
     backgroundColor: "#111827",
     alignItems: "center",
   },
-
-  btn: {
-    borderRadius: 10,
-    paddingVertical: 12,
-    paddingHorizontal: 18,
-    backgroundColor: "#111827",
-    alignItems: "center",
-    marginTop: 10,
-  },
-  btnSecondary: { backgroundColor: "#374151" },
   btnText: { color: "#fff", fontWeight: "800" },
   logoutBtn: {
     marginTop: 12,
     paddingVertical: 10,
     paddingHorizontal: 14,
-    backgroundColor: '#111',
+    backgroundColor: "#111",
     borderRadius: 8,
-    alignSelf: 'flex-start',
+    alignSelf: "flex-start",
   },
-  logoutText: {
-    color: '#fff',
-    fontWeight: '600',
-  }
+  logoutText: { color: "#fff", fontWeight: "600" },
 });
