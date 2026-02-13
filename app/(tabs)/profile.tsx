@@ -1,4 +1,4 @@
-// app/(tabs)/profile.tsx
+﻿// app/(tabs)/profile.tsx
 // Robust: use avatarValid/coverValid to decide fallback vs remote,
 // cache-bust on load/upload, and force remount when validity flips.
 
@@ -21,7 +21,7 @@ import {
   getAuthToken,
 } from "../../components/lib/api";
 
-// ✅ Local fallback assets (MUST exist at these paths)
+// âœ… Local fallback assets (MUST exist at these paths)
 const FALLBACK_AVATAR = require("../../assets/images/tabz-avatar.png");
 const FALLBACK_COVER = require("../../assets/images/tabz-cover.png");
 
@@ -44,7 +44,7 @@ function getInitials(name: string | null | undefined) {
 }
 
 function isTinyImage(w?: number, h?: number) {
-  // ✅ Treat ONLY explicit 1x1 as invalid.
+  // âœ… Treat ONLY explicit 1x1 as invalid.
   // On web, width/height can be undefined even for valid images.
   return w === 1 && h === 1;
 }
@@ -228,9 +228,9 @@ const [loading, setLoading] = useState(true);
     );
   }
 
-  const debugLine = `type: ${profile.type} • avatarUrl: ${
+  const debugLine = `type: ${profile.type} â€¢ avatarUrl: ${
     profile.avatarUrl ? "yes" : "no"
-  } • coverUrl: ${profile.coverUrl ? "yes" : "no"} • platform: ${Platform.OS}`;
+  } â€¢ coverUrl: ${profile.coverUrl ? "yes" : "no"} â€¢ platform: ${Platform.OS}`;
 
   // Cache-bust only when imgNonce changes
   const avatarUri =

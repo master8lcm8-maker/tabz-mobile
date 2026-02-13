@@ -1,4 +1,4 @@
-// components/lib/api.ts
+﻿// components/lib/api.ts
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Platform } from "react-native";
 
@@ -48,7 +48,7 @@ const hydrationPromise: Promise<void> = new Promise<void>((resolve) => {
 // Fail-open safety: avoid indefinite hang if hydrateSession is not called.
 // IMPORTANT: On WEB we must NEVER fail-open. Web must hydrate from localStorage
 // before any authed request, otherwise we send empty Bearer and get 401.
-// 🔒 FIX: NEVER fail-open on any platform (prevents empty Bearer)
+// ðŸ”’ FIX: NEVER fail-open on any platform (prevents empty Bearer)
 const HYDRATION_FAILOPEN_MS = 0;
 
 const hydrationFailOpenTimer =
@@ -232,7 +232,7 @@ function getEffectiveTokenOrThrow(): string {
 // ---------------------------
 // REQUEST WRAPPER
 // ---------------------------
-// 🔒 FIX: never emit Authorization when token is empty/whitespace
+// ðŸ”’ FIX: never emit Authorization when token is empty/whitespace
 function buildAuthHeaders(token: string): Record<string, string> {
   const headers: Record<string, string> = {
     "Cache-Control": "no-cache",
@@ -267,7 +267,7 @@ function unwrapResponse<T = any>(data: any): T {
 }
 
 async function request(method: "GET" | "POST", path: string, body?: any) {
-  // 🔒 Ensure BASE_URL + token hydration happened before we fire requests
+  // ðŸ”’ Ensure BASE_URL + token hydration happened before we fire requests
   await awaitHydration();
 
   const url = BASE_URL + path;
@@ -316,7 +316,7 @@ export async function apiUploadMultipart(
   file: File | Blob | NativeFile,
   fieldName: string = "file"
 ) {
-  // 🔒 Ensure BASE_URL + token hydration happened before we fire requests
+  // ðŸ”’ Ensure BASE_URL + token hydration happened before we fire requests
   await awaitHydration();
 
   const url = BASE_URL + path;
@@ -373,7 +373,7 @@ export function uploadMyCover(file: File | Blob | NativeFile) {
 // LOGIN (WEB-FIRST)
 // ---------------------------
 export async function loginWithPassword(email: string, password: string): Promise<string> {
-  // 🔒 Ensure BASE_URL hydration occurred before login attempts.
+  // ðŸ”’ Ensure BASE_URL hydration occurred before login attempts.
   await awaitHydration();
 
   const endpoints = [
@@ -544,3 +544,7 @@ export async function getBankInfoSummary(): Promise<BankInfoSummary> {
     raw: info,
   };
 }
+
+
+
+
