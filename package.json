@@ -33,7 +33,6 @@
   "devDependencies": {
     "@types/react": "~19.1.10",
     "babel-plugin-module-resolver": "^5.0.2",
-    "playwright": "^1.58.2",
     "typescript": "^5.9.3"
   }
 }
