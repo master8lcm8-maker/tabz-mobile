@@ -1,6 +1,7 @@
 // app/(tabs)/profile.tsx
 // Robust: use avatarValid/coverValid to decide fallback vs remote,
 // cache-bust on load/upload, and force remount when validity flips.
+// Pillar 5 frontend surface added: Danger Zone / Account Deletion UI.
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
@@ -13,11 +14,13 @@ import {
   TouchableOpacity,
   Platform,
   Pressable,
+  TextInput,
 } from "react-native";
 import { useRouter } from "expo-router";
 
 import {
   apiGet,
+  apiPost,
   hydrateAuthToken,
   clearAuthToken,
   getBaseUrl,
@@ -65,6 +68,13 @@ export default function MyProfileScreen() {
   const [avatarValid, setAvatarValid] = useState(false);
   const [coverValid, setCoverValid] = useState(false);
   const [imgNonce, setImgNonce] = useState(0);
+
+  const [showDangerZone, setShowDangerZone] = useState(false);
+  const [deletionReason, setDeletionReason] = useState("");
+  const [deletionPassword, setDeletionPassword] = useState("");
+  const [deletionMessage, setDeletionMessage] = useState<string | null>(null);
+  const [deletionBusy, setDeletionBusy] = useState(false);
+  const [requestCreated, setRequestCreated] = useState(false);
 
   const initials = useMemo(
     () => getInitials(profile?.displayName),
@@ -150,6 +160,63 @@ export default function MyProfileScreen() {
     },
     [loadProfile]
   );
+
+  const requestDeletion = useCallback(async () => {
+    setDeletionMessage(null);
+    setDeletionBusy(true);
+
+    try {
+      const payload: any = {};
+      const reason = deletionReason.trim();
+      if (reason) payload.reason = reason;
+
+      const res: any = await apiPost("/account-deletion/request", payload);
+
+      setRequestCreated(true);
+      setDeletionMessage(
+        res?.alreadyPending
+          ? "Deletion request already exists. Enter password below to confirm."
+          : "Deletion request created. Enter password below to confirm."
+      );
+    } catch (e: any) {
+      setDeletionMessage(String(e?.message || e || "Failed to request deletion."));
+    } finally {
+      setDeletionBusy(false);
+    }
+  }, [deletionReason]);
+
+  const confirmDeletion = useCallback(async () => {
+    setDeletionMessage(null);
+
+    const password = deletionPassword.trim();
+    if (!password) {
+      setDeletionMessage("Password is required to confirm account deletion.");
+      return;
+    }
+
+    setDeletionBusy(true);
+    try {
+      const payload: any = {
+        confirm: true,
+        password,
+      };
+
+      const reason = deletionReason.trim();
+      if (reason) payload.reason = reason;
+
+      await apiPost("/account-deletion/confirm", payload);
+
+      setDeletionMessage("Account deletion completed. Logging out...");
+      setTimeout(async () => {
+        await clearAuthToken();
+        router.replace("/login");
+      }, 800);
+    } catch (e: any) {
+      setDeletionMessage(String(e?.message || e || "Failed to confirm deletion."));
+    } finally {
+      setDeletionBusy(false);
+    }
+  }, [deletionPassword, deletionReason, router]);
 
   useEffect(() => {
     let mounted = true;
@@ -272,6 +339,75 @@ export default function MyProfileScreen() {
         ) : (
           <Text style={styles.bioMuted}>No bio yet</Text>
         )}
+
+        <View style={styles.dangerZone}>
+          <Text style={styles.dangerTitle}>Danger Zone</Text>
+          <Text style={styles.dangerText}>
+            Request permanent account deletion. This uses the locked Pillar 5 backend flow.
+          </Text>
+
+          <TouchableOpacity
+            style={styles.dangerToggleBtn}
+            onPress={() => {
+              setShowDangerZone((v) => !v);
+              setDeletionMessage(null);
+            }}
+          >
+            <Text style={styles.dangerToggleText}>
+              {showDangerZone ? "Hide Delete Account" : "Delete Account"}
+            </Text>
+          </TouchableOpacity>
+
+          {showDangerZone ? (
+            <View style={styles.dangerCard}>
+              <Text style={styles.fieldLabel}>Reason (optional)</Text>
+              <TextInput
+                value={deletionReason}
+                onChangeText={setDeletionReason}
+                placeholder="Why are you deleting this account?"
+                placeholderTextColor="#888"
+                style={styles.input}
+              />
+
+              <TouchableOpacity
+                style={styles.requestBtn}
+                disabled={deletionBusy}
+                onPress={requestDeletion}
+              >
+                <Text style={styles.requestBtnText}>
+                  {deletionBusy ? "Working..." : "Request Account Deletion"}
+                </Text>
+              </TouchableOpacity>
+
+              <Text style={styles.fieldLabel}>Password (required to confirm)</Text>
+              <TextInput
+                value={deletionPassword}
+                onChangeText={setDeletionPassword}
+                placeholder="Enter your password"
+                placeholderTextColor="#888"
+                secureTextEntry
+                style={styles.input}
+              />
+
+              <TouchableOpacity
+                style={[
+                  styles.confirmBtn,
+                  !requestCreated && styles.confirmBtnDisabled,
+                ]}
+                disabled={deletionBusy || !requestCreated}
+                onPress={confirmDeletion}
+              >
+                <Text style={styles.confirmBtnText}>
+                  {deletionBusy ? "Working..." : "Confirm Delete Account"}
+                </Text>
+              </TouchableOpacity>
+
+              {deletionMessage ? (
+                <Text style={styles.deletionMessage}>{deletionMessage}</Text>
+              ) : null}
+            </View>
+          ) : null}
+        </View>
       </View>
     </ScrollView>
   );
@@ -323,4 +459,89 @@ const styles = StyleSheet.create({
     alignSelf: "flex-start",
   },
   logoutText: { color: "#fff", fontWeight: "600" },
+
+  dangerZone: {
+    marginTop: 28,
+    paddingTop: 18,
+    borderTopWidth: 1,
+    borderTopColor: "#e5e7eb",
+  },
+  dangerTitle: {
+    fontSize: 18,
+    fontWeight: "800",
+    color: "#b91c1c",
+  },
+  dangerText: {
+    marginTop: 8,
+    fontSize: 13,
+    color: "#7f1d1d",
+  },
+  dangerToggleBtn: {
+    marginTop: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    backgroundColor: "#991b1b",
+    borderRadius: 10,
+    alignSelf: "flex-start",
+  },
+  dangerToggleText: {
+    color: "#fff",
+    fontWeight: "800",
+  },
+  dangerCard: {
+    marginTop: 14,
+    padding: 14,
+    borderRadius: 12,
+    backgroundColor: "#fef2f2",
+    borderWidth: 1,
+    borderColor: "#fecaca",
+  },
+  fieldLabel: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#7f1d1d",
+    marginBottom: 6,
+    marginTop: 8,
+  },
+  input: {
+    borderWidth: 1,
+    borderColor: "#fca5a5",
+    backgroundColor: "#fff",
+    borderRadius: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    color: "#111",
+  },
+  requestBtn: {
+    marginTop: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    borderRadius: 10,
+    backgroundColor: "#dc2626",
+    alignItems: "center",
+  },
+  requestBtnText: {
+    color: "#fff",
+    fontWeight: "800",
+  },
+  confirmBtn: {
+    marginTop: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    borderRadius: 10,
+    backgroundColor: "#7f1d1d",
+    alignItems: "center",
+  },
+  confirmBtnDisabled: {
+    opacity: 0.45,
+  },
+  confirmBtnText: {
+    color: "#fff",
+    fontWeight: "800",
+  },
+  deletionMessage: {
+    marginTop: 12,
+    fontSize: 13,
+    color: "#7f1d1d",
+  },
 });
